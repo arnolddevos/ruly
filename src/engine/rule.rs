@@ -63,25 +63,20 @@ pub fn recursive_stable(table: &mut Table, rules: &Rules) {
     }
 }
 
-// pub fn recursive(table: &mut Table, rules: &Rules) {
-//     loop {
-//         let mut usize = 0;
-//         for rule in rules {
-//             if let Some(value) = rule.fire(table) {
-//                 if let Some(prev) = table.get(rule.property_name()) {
-//                     let value = prev.join(value);
-//                     if prev != value {
-//                         table.insert(rule.property_name(), value);
-//                         usize += 1;
-//                     }
-//                 } else {
-//                     table.insert(rule.property_name(), value);
-//                     usize += 1;
-//                 }
-//             }
-//         }
-//         if usize == 0 {
-//             break;
-//         }
-//     }
-// }
+pub fn recursive(table: &mut Table, rules: &Rules) {
+    loop {
+        let mut usize = 0;
+        for rule in rules {
+            let value = rule.fire(table.view());
+            let prev = table.get(rule.property_name());
+            let join = prev.join(value);
+            let prev = table.insert(rule.property_name(), join.clone());
+            if prev != join {
+                usize += 1
+            };
+        }
+        if usize == 0 {
+            break;
+        }
+    }
+}
