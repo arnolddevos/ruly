@@ -1,35 +1,40 @@
 use super::{
-    table::{Property, Table},
+    property::{Model, Property},
+    table::{Table, View},
     variant::Variant,
 };
 
-pub struct Rule<P, F>(P, F);
+pub struct Rule<M, F> {
+    prop: Property<M>,
+    func: F,
+}
 
-pub fn rule<P, F>(prop: P, func: F) -> Box<dyn Propagator>
+pub fn rule<M, F>(prop: Property<M>, func: F) -> Box<dyn Propagator>
 where
-    P: Property + 'static,
-    F: Fn(&Table) -> Option<P::Value> + 'static,
-    P::Value: Into<Variant>,
+    M: Model + 'static,
+    F: Fn(View) -> Option<M::Repr> + 'static,
+    Variant: From<M::Repr>,
 {
-    Box::new(Rule(prop, func))
+    Box::new(Rule { prop, func })
 }
 
 pub trait Propagator {
     fn property_name(&self) -> &str;
-    fn fire(&self, state: &Table) -> Option<Variant>;
+    fn fire(&self, state: View) -> Variant;
 }
 
-impl<P, F> Propagator for Rule<P, F>
+impl<M, F> Propagator for Rule<M, F>
 where
-    P: Property,
-    F: Fn(&Table) -> Option<P::Value>,
-    P::Value: Into<Variant>,
+    M: Model,
+    F: Fn(View) -> Option<M::Repr>,
+    Variant: From<M::Repr>,
 {
     fn property_name(&self) -> &str {
-        &self.0.name()
+        &self.prop.name
     }
-    fn fire(&self, state: &Table) -> Option<Variant> {
-        (self.1)(state).map(|v| v.into())
+    fn fire(&self, state: View) -> Variant {
+        let x = (self.func)(state);
+        x.into()
     }
 }
 
@@ -38,9 +43,11 @@ pub type Rules = Vec<Box<dyn Propagator>>;
 pub fn one_shot_stable(table: &mut Table, rules: &Rules) -> usize {
     let mut usize = 0;
     for rule in rules {
-        if !table.contains_key(rule.property_name()) {
-            if let Some(value) = rule.fire(table) {
-                table.insert(rule.property_name(), value);
+        let a = table.get(rule.property_name());
+        if matches!(a, Variant::Nothing | Variant::Invalid(_)) {
+            let b = rule.fire(table.view());
+            if !matches!(b, Variant::Nothing) {
+                table.insert(rule.property_name(), b);
                 usize += 1;
             }
         }
@@ -56,25 +63,25 @@ pub fn recursive_stable(table: &mut Table, rules: &Rules) {
     }
 }
 
-pub fn recursive(table: &mut Table, rules: &Rules) {
-    loop {
-        let mut usize = 0;
-        for rule in rules {
-            if let Some(value) = rule.fire(table) {
-                if let Some(prev) = table.get(rule.property_name()) {
-                    let value = prev.join(&value);
-                    if prev != value {
-                        table.insert(rule.property_name(), value);
-                        usize += 1;
-                    }
-                } else {
-                    table.insert(rule.property_name(), value);
-                    usize += 1;
-                }
-            }
-        }
-        if usize == 0 {
-            break;
-        }
-    }
-}
+// pub fn recursive(table: &mut Table, rules: &Rules) {
+//     loop {
+//         let mut usize = 0;
+//         for rule in rules {
+//             if let Some(value) = rule.fire(table) {
+//                 if let Some(prev) = table.get(rule.property_name()) {
+//                     let value = prev.join(value);
+//                     if prev != value {
+//                         table.insert(rule.property_name(), value);
+//                         usize += 1;
+//                     }
+//                 } else {
+//                     table.insert(rule.property_name(), value);
+//                     usize += 1;
+//                 }
+//             }
+//         }
+//         if usize == 0 {
+//             break;
+//         }
+//     }
+// }

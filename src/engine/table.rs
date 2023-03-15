@@ -1,118 +1,66 @@
-use super::variant::{Keyword, Variant};
-use chrono::{DateTime, NaiveDate, Utc};
+use super::{
+    property::{Model, Property},
+    variant::Variant,
+};
 use std::collections::HashMap;
-
-pub trait Property {
-    type Value;
-    fn name(&self) -> &str;
-}
 
 pub struct Table(HashMap<String, Variant>);
 
 impl Table {
-    pub fn insert_pv<P, V>(&mut self, prop: &P, value: V)
+    pub fn get(&self, name: &str) -> Variant {
+        self.0.get(name).cloned().unwrap_or(Variant::Nothing)
+    }
+
+    pub fn insert(&mut self, name: &str, value: Variant) -> Variant {
+        self.0
+            .insert(name.to_string(), value)
+            .unwrap_or(Variant::Nothing)
+    }
+
+    pub fn view<'a>(&'a self) -> View<'a> {
+        View(&self)
+    }
+}
+
+pub struct View<'a>(&'a Table);
+
+impl<'a> View<'a> {
+    pub fn get1<M1>(&self, prop1: Property<M1>) -> Option<M1::Repr>
     where
-        P: Property<Value = V>,
-        V: Into<Variant>,
+        M1: Model,
+        M1::Repr: TryFrom<Variant>,
     {
-        self.insert(prop.name(), value.into());
+        self.0.get(prop1.name).try_into().ok()
     }
 
-    pub fn insert(&mut self, name: &str, value: Variant) -> Option<Variant> {
-        self.0.insert(name.to_string(), value)
-    }
-
-    pub fn get(&self, name: &str) -> Option<Variant> {
-        self.0.get(name).cloned()
-    }
-
-    pub fn contains_key(&self, name: &str) -> bool {
-        self.0.contains_key(name)
-    }
-
-    pub fn get1<P>(&self, p: P) -> Option<P::Value>
+    pub fn get2<M1, M2>(
+        &self,
+        prop1: Property<M1>,
+        prop2: Property<M2>,
+    ) -> Option<(M1::Repr, M2::Repr)>
     where
-        P: Property,
-        P::Value: TryFrom<Variant>,
+        M1: Model,
+        M1::Repr: TryFrom<Variant>,
+        M2: Model,
+        M2::Repr: TryFrom<Variant>,
     {
-        self.0
-            .get(p.name())
-            .and_then(|value| value.clone().try_into().ok())
+        Some((self.get1(prop1)?, self.get1(prop2)?))
     }
 
-    pub fn get2<P, Q>(&self, p: P, q: Q) -> Option<(P::Value, Q::Value)>
+    pub fn get3<M1, M2, M3>(
+        &self,
+        prop1: Property<M1>,
+        prop2: Property<M2>,
+        prop3: Property<M3>,
+    ) -> Option<(M1::Repr, M2::Repr, M3::Repr)>
     where
-        P: Property,
-        Q: Property,
-        P::Value: TryFrom<Variant>,
-        Q::Value: TryFrom<Variant>,
+        M1: Model,
+        M1::Repr: TryFrom<Variant>,
+        M2: Model,
+        M2::Repr: TryFrom<Variant>,
+        M3: Model,
+        M3::Repr: TryFrom<Variant>,
     {
-        Some((self.get1(p)?, self.get1(q)?))
-    }
-
-    pub fn get3<P, Q, R>(&self, p: P, q: Q, r: R) -> Option<(P::Value, Q::Value, R::Value)>
-    where
-        P: Property,
-        Q: Property,
-        R: Property,
-        P::Value: TryFrom<Variant>,
-        Q::Value: TryFrom<Variant>,
-        R::Value: TryFrom<Variant>,
-    {
-        Some((self.get1(p)?, self.get1(q)?, self.get1(r)?))
-    }
-}
-
-pub struct StringProp(&'static str);
-
-impl Property for StringProp {
-    type Value = String;
-    fn name(&self) -> &str {
-        self.0
-    }
-}
-
-pub struct IntProp(&'static str);
-
-impl Property for IntProp {
-    type Value = i64;
-    fn name(&self) -> &str {
-        self.0
-    }
-}
-
-pub struct FloatProp(&'static str);
-
-impl Property for FloatProp {
-    type Value = f64;
-    fn name(&self) -> &str {
-        self.0
-    }
-}
-
-pub struct DateProp(&'static str);
-
-impl Property for DateProp {
-    type Value = NaiveDate;
-    fn name(&self) -> &str {
-        self.0
-    }
-}
-
-pub struct InstantProp(&'static str);
-
-impl Property for InstantProp {
-    type Value = DateTime<Utc>;
-    fn name(&self) -> &str {
-        self.0
-    }
-}
-
-pub struct KeyWordProp<T>(&'static str, T);
-
-impl<T> Property for KeyWordProp<T> {
-    type Value = Keyword<T>;
-    fn name(&self) -> &str {
-        self.0
+        Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
     }
 }

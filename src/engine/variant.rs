@@ -1,81 +1,65 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashSet, fmt::Display, iter::once};
+use std::fmt::Display;
 
-#[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Variant {
+    /// Top of the join lattice
+    Conflict(String, String),
+
+    /// Join by equality
     String(String),
     Date(NaiveDate),
     Instant(DateTime<Utc>),
     Float(f64),
     Int(i64),
-    Error(HashSet<String>),
+
+    /// Join by union
+    /// StringSet(HashSet<String>),
+
+    /// A correctable error, below the above
+    Invalid(String),
+
+    /// Bottom of the join lattice
+    Nothing,
+}
+
+impl Variant {
+    pub fn join(self, other: Self) -> Self {
+        // micro-optimisation: we expect to be called when a!=b and often when a or b is Nothing
+        match (self, other) {
+            (a, Self::Nothing) => a,
+            (Self::Nothing, b) => b,
+            (a, Self::Invalid(_)) => a,
+            (Self::Invalid(_), b) => b,
+            (Self::Conflict(a, b), _) => Self::Conflict(a, b),
+            (_, Self::Conflict(a, b)) => Self::Conflict(a, b),
+            (a, b) if a == b => a,
+            (a, b) => Self::Conflict(a.to_string(), b.to_string()),
+        }
+    }
 }
 
 impl Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Variant::String(v) => v.fmt(f),
-            Variant::Date(v) => v.fmt(f),
-            Variant::Instant(v) => v.fmt(f),
-            Variant::Float(v) => v.fmt(f),
-            Variant::Int(v) => v.fmt(f),
-            Variant::Error(vs) => fmt_error(vs, f),
+            Self::String(v) => v.fmt(f),
+            Self::Date(v) => v.fmt(f),
+            Self::Instant(v) => v.fmt(f),
+            Self::Float(v) => v.fmt(f),
+            Self::Int(v) => v.fmt(f),
+            Self::Conflict(a, b) => write!(f, "Conflict: {a} and {b}"),
+            Self::Invalid(a) => write!(f, "Invalid: {a}"),
+            Self::Nothing => f.write_str("Nothing"),
         }
     }
 }
-
-fn fmt_error(vs: &HashSet<String>, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    if vs.len() == 1 {
-        f.write_str("Error:")?
-    } else {
-        f.write_str("Conflict:")?
-    }
-    for v in vs.iter() {
-        f.write_str(" ")?;
-        f.write_str(v)?
-    }
-    Ok(())
-}
-
-impl Variant {
-    pub fn join(&self, other: &Variant) -> Variant {
-        match (self, other) {
-            (Variant::Error(vs0), Variant::Error(vs1)) => {
-                Variant::Error(vs0.iter().cloned().chain(vs1.iter().cloned()).collect())
-            }
-            (Variant::Error(vs0), v1) => {
-                Variant::Error(vs0.iter().cloned().chain(once(v1.to_string())).collect())
-            }
-            (v0, Variant::Error(vs1)) => {
-                Variant::Error(once(v0.to_string()).chain(vs1.iter().cloned()).collect())
-            }
-            (v0, v1) => {
-                if v0 == v1 {
-                    v0.clone()
-                } else {
-                    Variant::Error([v0.to_string(), v1.to_string()].into())
-                }
-            }
-        }
-    }
-}
-
-pub trait KeywordType
-where
-    Self: Sized,
-{
-    fn normalise(value: &str) -> Option<Keyword<Self>>;
-}
-
-#[derive(Clone, Debug)]
-pub struct Keyword<T>(String, T);
 
 impl TryFrom<Variant> for String {
     type Error = ();
     fn try_from(value: Variant) -> Result<Self, Self::Error> {
         match value {
-            Variant::Error(_) => Err(()),
+            Variant::Conflict(_, _) => Err(()),
             value => Ok(value.to_string()),
         }
     }
@@ -83,7 +67,7 @@ impl TryFrom<Variant> for String {
 
 impl From<String> for Variant {
     fn from(value: String) -> Self {
-        Variant::String(value)
+        Self::String(value)
     }
 }
 
@@ -99,7 +83,7 @@ impl TryFrom<Variant> for i64 {
 
 impl From<i64> for Variant {
     fn from(value: i64) -> Self {
-        Variant::Int(value)
+        Self::Int(value)
     }
 }
 
@@ -115,7 +99,7 @@ impl TryFrom<Variant> for f64 {
 
 impl From<f64> for Variant {
     fn from(value: f64) -> Self {
-        Variant::Float(value)
+        Self::Float(value)
     }
 }
 
@@ -131,7 +115,7 @@ impl TryFrom<Variant> for NaiveDate {
 
 impl From<NaiveDate> for Variant {
     fn from(value: NaiveDate) -> Self {
-        Variant::Date(value)
+        Self::Date(value)
     }
 }
 
@@ -147,31 +131,31 @@ impl TryFrom<Variant> for DateTime<Utc> {
 
 impl From<DateTime<Utc>> for Variant {
     fn from(value: DateTime<Utc>) -> Self {
-        Variant::Instant(value)
+        Self::Instant(value)
     }
 }
 
-impl<T> TryFrom<Variant> for Keyword<T>
+impl<T> From<Option<T>> for Variant
 where
-    T: KeywordType,
+    Self: From<T>,
 {
-    type Error = ();
-    fn try_from(value: Variant) -> Result<Self, Self::Error> {
+    fn from(value: Option<T>) -> Self {
         match value {
-            Variant::String(x) => {
-                if let Some(kw) = T::normalise(&x) {
-                    Ok(kw)
-                } else {
-                    Err(())
-                }
-            }
-            _ => Err(()),
+            Some(t) => t.into(),
+            None => Self::Nothing,
         }
     }
 }
 
-impl<T> From<Keyword<T>> for Variant {
-    fn from(value: Keyword<T>) -> Self {
-        Variant::String(value.0)
+impl<T, E> From<Result<T, E>> for Variant
+where
+    Self: From<T>,
+    E: Display,
+{
+    fn from(value: Result<T, E>) -> Self {
+        match value {
+            Ok(t) => t.into(),
+            Err(e) => Self::Invalid(e.to_string()),
+        }
     }
 }
