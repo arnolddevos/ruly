@@ -4,11 +4,13 @@ use super::{
     variant::{JoinResult, Variant},
 };
 
+/// A typed rule for a given property.
 pub struct Rule<M, F> {
     prop: Property<M>,
     func: F,
 }
 
+/// Create a typed rule and convert return it as a propagator.
 pub fn rule<M, F>(prop: Property<M>, func: F) -> Box<dyn Propagator>
 where
     M: Model + 'static,
@@ -18,6 +20,7 @@ where
     Box::new(Rule { prop, func })
 }
 
+/// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
     fn property_name(&self) -> &str;
     fn fire(&self, state: View) -> Variant;
