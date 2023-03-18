@@ -1,7 +1,7 @@
 use super::{
     property::{Model, Property},
     table::{Table, View},
-    variant::Variant,
+    variant::{JoinResult, Variant},
 };
 
 pub struct Rule<M, F> {
@@ -41,18 +41,18 @@ where
 pub type Rules = Vec<Box<dyn Propagator>>;
 
 pub fn one_shot_stable(table: &mut Table, rules: &Rules) -> usize {
-    let mut usize = 0;
+    let mut changes = 0;
     for rule in rules {
         let a = table.get(rule.property_name());
-        if matches!(a, Variant::Nothing | Variant::Invalid(_)) {
+        if a == Variant::Nothing {
             let b = rule.fire(table.view());
-            if !matches!(b, Variant::Nothing) {
+            if b != Variant::Nothing {
                 table.insert(rule.property_name(), b);
-                usize += 1;
+                changes += 1;
             }
         }
     }
-    usize
+    changes
 }
 
 pub fn recursive_stable(table: &mut Table, rules: &Rules) {
@@ -65,17 +65,21 @@ pub fn recursive_stable(table: &mut Table, rules: &Rules) {
 
 pub fn recursive(table: &mut Table, rules: &Rules) {
     loop {
-        let mut usize = 0;
+        let mut changes = 0;
         for rule in rules {
             let value = rule.fire(table.view());
-            let prev = table.get(rule.property_name());
-            let join = prev.join(value);
-            let prev = table.insert(rule.property_name(), join.clone());
-            if prev != join {
-                usize += 1
-            };
+            if value != Variant::Nothing {
+                let prev = table.get(rule.property_name());
+                match prev.join(value) {
+                    JoinResult::Left(_) => (),
+                    JoinResult::Right(value) | JoinResult::Greater(value) => {
+                        table.insert(rule.property_name(), value);
+                        changes += 1;
+                    }
+                }
+            }
         }
-        if usize == 0 {
+        if changes == 0 {
             break;
         }
     }

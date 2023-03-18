@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display, hash::Hash};
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum Variant {
@@ -15,7 +15,7 @@ pub enum Variant {
     Int(i64),
 
     /// Join by union
-    /// StringSet(HashSet<String>),
+    StringSet(HashSet<String>),
 
     /// A correctable error, below the above
     Invalid(String),
@@ -25,25 +25,57 @@ pub enum Variant {
 }
 
 impl Variant {
-    pub fn join(self, other: Self) -> Self {
-        // micro-optimisation: we expect to be called when a!=b and often when a or b is Nothing
+    pub fn join(self, other: Self) -> JoinResult {
+        use JoinResult::*;
+        use Variant::*;
         match (self, other) {
-            (a, Self::Nothing) => a,
-            (Self::Nothing, b) => b,
-            (a, Self::Invalid(_)) => a,
-            (Self::Invalid(_), b) => b,
-            (Self::Conflict(a, b), _) => Self::Conflict(a, b),
-            (_, Self::Conflict(a, b)) => Self::Conflict(a, b),
-            (a, b) if a == b => a,
-            (a, b) => Self::Conflict(a.to_string(), b.to_string()),
+            (a, Nothing) => Left(a),
+            (Nothing, b) => Right(b),
+            (a, Invalid(_)) => Left(a),
+            (Invalid(_), b) => Right(b),
+            (a @ Conflict(_, _), _) => Left(a),
+            (_, b @ Conflict(_, _)) => Right(b),
+            (StringSet(x), StringSet(y)) => {
+                if x.is_superset(&y) {
+                    Left(StringSet(x))
+                } else if y.is_superset(&x) {
+                    Right(StringSet(y))
+                } else {
+                    Greater(StringSet(union(x, y)))
+                }
+            }
+            (a, b) if a == b => Left(a),
+            (a, b) => Greater(Conflict(a.to_string(), b.to_string())),
         }
     }
+}
+
+/// The HashSet::union method doesn't give me this signature.
+/// TODO: investigate.
+fn union<A>(mut x: HashSet<A>, mut y: HashSet<A>) -> HashSet<A>
+where
+    A: Eq + Hash,
+{
+    if x.len() > y.len() {
+        x.extend(y);
+        x
+    } else {
+        y.extend(x);
+        y
+    }
+}
+
+pub enum JoinResult {
+    Left(Variant),
+    Right(Variant),
+    Greater(Variant),
 }
 
 impl Display for Variant {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::String(v) => v.fmt(f),
+            Self::StringSet(v) => write!(f, "{v:?}"),
             Self::Date(v) => v.fmt(f),
             Self::Instant(v) => v.fmt(f),
             Self::Float(v) => v.fmt(f),
