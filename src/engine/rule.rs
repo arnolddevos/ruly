@@ -40,7 +40,10 @@ where
 
 pub type Rules = Vec<Box<dyn Propagator>>;
 
-pub fn one_shot_stable(table: &mut Table, rules: &Rules) -> usize {
+/// Evaluate rules in priority order. The first result for a given
+/// property stands.  Each rule is evaluated at most once.
+/// Variant::Nothing indicate no result and no joins are performed.  
+pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     let mut changes = 0;
     for rule in rules {
         let a = table.get(rule.property_name());
@@ -55,15 +58,11 @@ pub fn one_shot_stable(table: &mut Table, rules: &Rules) -> usize {
     changes
 }
 
-pub fn recursive_stable(table: &mut Table, rules: &Rules) {
-    loop {
-        if one_shot_stable(table, rules) == 0 {
-            break;
-        }
-    }
-}
-
-pub fn recursive(table: &mut Table, rules: &Rules) {
+/// This recursively joins results until a fixed point is reached.  
+/// Rule order is unimportant.
+/// The strategy is called naive evaluation in the lit.  
+/// Naive is the best we can do because the rules are opaque.
+pub fn evaluate_naive(table: &mut Table, rules: &Rules) {
     loop {
         let mut changes = 0;
         for rule in rules {
