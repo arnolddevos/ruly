@@ -10,7 +10,7 @@ pub struct Rule<M, F> {
     func: F,
 }
 
-/// Create a typed rule and convert return it as a propagator.
+/// Create a typed rule and return it as a propagator.
 pub fn rule<M, F>(prop: Property<M>, func: F) -> Box<dyn Propagator>
 where
     M: Model + 'static,
