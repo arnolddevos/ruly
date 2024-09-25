@@ -24,6 +24,52 @@ where
     Box::new(Rule { prop, func })
 }
 
+/// A typed rule with one explicit dependency.
+pub fn rule1<A, B, F>(prop1: Property<A>, prop: Property<B>, func: F) -> Box<dyn Propagator>
+where
+    A: Model + 'static,
+    B: Model + 'static,
+    F: Fn(A) -> Option<B> + 'static,
+{
+    rule(prop, move |view| view.get1(&prop1).and_then(&func))
+}
+
+/// A typed rule with two explicit dependencies.
+pub fn rule2<A, B, C, F>(
+    prop1: Property<A>,
+    prop2: Property<B>,
+    prop: Property<C>,
+    func: F,
+) -> Box<dyn Propagator>
+where
+    A: Model + 'static,
+    B: Model + 'static,
+    C: Model + 'static,
+    F: Fn((A, B)) -> Option<C> + 'static,
+{
+    rule(prop, move |view| view.get2(&prop1, &prop2).and_then(&func))
+}
+
+/// A typed rule with three explicit dependencies.
+pub fn rule3<A, B, C, D, F>(
+    prop1: Property<A>,
+    prop2: Property<B>,
+    prop3: Property<C>,
+    prop: Property<D>,
+    func: F,
+) -> Box<dyn Propagator>
+where
+    A: Model + 'static,
+    B: Model + 'static,
+    C: Model + 'static,
+    D: Model + 'static,
+    F: Fn((A, B, C)) -> Option<D> + 'static,
+{
+    rule(prop, move |view| {
+        view.get3(&prop1, &prop2, &prop3).and_then(&func)
+    })
+}
+
 impl<A, F> Propagator for Rule<A, F>
 where
     A: Model,
