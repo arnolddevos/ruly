@@ -26,10 +26,13 @@ impl<A: Model> Property<A> {
 
 pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Table(HashMap<Ident, Variant>);
 
 impl Table {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
     pub fn get(&self, name: &Ident) -> Variant {
         self.0.get(name).cloned().unwrap_or(Variant::Nothing)
     }
@@ -40,6 +43,14 @@ impl Table {
 
     pub fn view<'a>(&'a self) -> View<'a> {
         View(&self)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&Ident, &Variant)> {
+        self.0.iter()
+    }
+
+    pub fn into_iter(self) -> impl Iterator<Item = (Ident, Variant)> {
+        self.0.into_iter()
     }
 }
 

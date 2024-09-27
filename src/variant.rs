@@ -41,27 +41,20 @@ impl Variant {
         use JoinResult::*;
         use Variant::*;
         match (self, other) {
-            (a, Nothing) => Left(a),
-            (Nothing, b) => Right(b),
-            (a, Invalid(_)) => Left(a),
-            (Invalid(_), b) => Right(b),
-            (a @ Conflict(_, _), _) => Left(a),
-            (_, b @ Conflict(_, _)) => Right(b),
-            (Set(x), Set(y)) => {
-                if x.is_superset(&y) {
-                    Left(Set(x))
-                } else if y.is_superset(&x) {
-                    Right(Set(y))
-                } else {
-                    Greater(Set(x.union(y)))
-                }
-            }
-            (String(a), String(b)) if a == b => Left(String(a)),
-            (Date(a), Date(b)) if a == b => Left(Date(a)),
-            (Instant(a), Instant(b)) if a == b => Left(Instant(a)),
-            (Float(a), Float(b)) if a == b => Left(Float(a)),
-            (Int(a), Int(b)) if a == b => Left(Int(a)),
-            (a, b) => Greater(Conflict(Box::new(a), Box::new(b))),
+            (a, Nothing) => Hold(a),
+            (Nothing, b) => Promote(b),
+            (a, Invalid(_)) => Hold(a),
+            (Invalid(_), b) => Promote(b),
+            (a @ Conflict(_, _), _) => Hold(a),
+            (_, b @ Conflict(_, _)) => Promote(b),
+            (Set(x), Set(y)) => x.join(y),
+            (Table(x), Table(y)) => x.join(y),
+            (String(a), String(b)) if a == b => Hold(String(a)),
+            (Date(a), Date(b)) if a == b => Hold(Date(a)),
+            (Instant(a), Instant(b)) if a == b => Hold(Instant(a)),
+            (Float(a), Float(b)) if a == b => Hold(Float(a)),
+            (Int(a), Int(b)) if a == b => Hold(Int(a)),
+            (a, b) => Promote(Conflict(Box::new(a), Box::new(b))),
         }
     }
 
@@ -89,6 +82,17 @@ impl Set {
         Set(x)
     }
 
+    pub fn join(self, other: Set) -> JoinResult {
+        use JoinResult::*;
+        use Variant::Set;
+
+        if self.is_superset(&other) {
+            Hold(Set(self))
+        } else {
+            Promote(Set(self.union(other)))
+        }
+    }
+
     pub fn is_superset(&self, other: &Set) -> bool {
         self.0.is_superset(&other.0)
     }
@@ -107,11 +111,39 @@ impl Display for Set {
     }
 }
 
+impl Table {
+    pub fn join(self: Rc<Self>, other: Rc<Self>) -> JoinResult {
+        use JoinResult::*;
+
+        let mut table = Table::new();
+        let mut promoted = false;
+
+        for (name, rhs) in Rc::unwrap_or_clone(other).into_iter() {
+            let lhs = self.get(&name);
+            match lhs.join(rhs) {
+                Hold(_) => {}
+                Promote(value) => {
+                    if !promoted {
+                        table = self.as_ref().clone();
+                    }
+                    table.insert(name, value);
+                    promoted = true;
+                }
+            }
+        }
+
+        if promoted {
+            Promote(Variant::Table(Rc::new(table)))
+        } else {
+            Hold(Variant::Table(self))
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum JoinResult {
-    Left(Variant),
-    Right(Variant),
-    Greater(Variant),
+    Hold(Variant),
+    Promote(Variant),
 }
 
 #[derive(Debug, Clone, Display, From, Serialize, Deserialize)]

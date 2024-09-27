@@ -151,8 +151,8 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules) {
             if !value.is_nothing() {
                 let prev = table.get(rule.property_name());
                 match prev.join(value) {
-                    JoinResult::Left(_) => (),
-                    JoinResult::Right(value) | JoinResult::Greater(value) => {
+                    JoinResult::Hold(_) => (),
+                    JoinResult::Promote(value) => {
                         table.insert(rule.property_name().clone(), value);
                         changes += 1;
                     }
