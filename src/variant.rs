@@ -1,9 +1,12 @@
+use crate::property::Table;
+
 use super::property::Ident;
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::rc::Rc;
 
 /// A general value.  A monomorphic version of Model type.
 #[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
@@ -20,7 +23,10 @@ pub enum Variant {
     Int(i64),
 
     /// Join by union
-    StringSet(Set),
+    Set(Set),
+
+    #[display("Table")]
+    Table(Rc<Table>),
 
     /// A correctable error, below the above
     Invalid(Error),
@@ -41,13 +47,13 @@ impl Variant {
             (Invalid(_), b) => Right(b),
             (a @ Conflict(_, _), _) => Left(a),
             (_, b @ Conflict(_, _)) => Right(b),
-            (StringSet(x), StringSet(y)) => {
+            (Set(x), Set(y)) => {
                 if x.is_superset(&y) {
-                    Left(StringSet(x))
+                    Left(Set(x))
                 } else if y.is_superset(&x) {
-                    Right(StringSet(y))
+                    Right(Set(y))
                 } else {
-                    Greater(StringSet(x.union(y)))
+                    Greater(Set(x.union(y)))
                 }
             }
             (String(a), String(b)) if a == b => Left(String(a)),
