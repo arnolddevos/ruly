@@ -1,12 +1,12 @@
 use crate::{
-    property::{Ident, Model, PropOrPath, Property, Table, View},
+    property::{Ident, Model, PropOrPath, Property, Table},
     variant::{Error, JoinResult, Variant},
 };
 
 /// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
     fn property_name(&self) -> &Ident;
-    fn fire(&self, state: View) -> Variant;
+    fn fire(&self, state: &Table) -> Variant;
 }
 
 /// A typed rule for a given property.
@@ -19,7 +19,7 @@ pub struct Rule<A, F> {
 pub fn rule<A, F>(prop: Property<A>, func: F) -> Box<dyn Propagator>
 where
     A: Model + 'static,
-    F: Fn(View) -> Option<A> + 'static,
+    F: Fn(&Table) -> Option<A> + 'static,
 {
     Box::new(Rule { prop, func })
 }
@@ -77,12 +77,12 @@ where
 impl<A, F> Propagator for Rule<A, F>
 where
     A: Model,
-    F: Fn(View) -> Option<A>,
+    F: Fn(&Table) -> Option<A>,
 {
     fn property_name(&self) -> &Ident {
         &self.prop.name
     }
-    fn fire(&self, state: View) -> Variant {
+    fn fire(&self, state: &Table) -> Variant {
         if let Some(x) = (self.func)(state) {
             x.into()
         } else {
@@ -101,7 +101,7 @@ pub struct RuleFallible<A, F> {
 pub fn rule_fallible<A, F>(prop: Property<A>, func: F) -> Box<dyn Propagator>
 where
     A: Model + 'static,
-    F: Fn(View) -> Result<Option<A>, Error> + 'static,
+    F: Fn(&Table) -> Result<Option<A>, Error> + 'static,
 {
     Box::new(RuleFallible { prop, func })
 }
@@ -109,12 +109,12 @@ where
 impl<A, F> Propagator for RuleFallible<A, F>
 where
     A: Model,
-    F: Fn(View) -> Result<Option<A>, Error>,
+    F: Fn(&Table) -> Result<Option<A>, Error>,
 {
     fn property_name(&self) -> &Ident {
         &self.prop.name
     }
-    fn fire(&self, state: View) -> Variant {
+    fn fire(&self, state: &Table) -> Variant {
         match (self.func)(state) {
             Ok(Some(x)) => x.into(),
             Ok(None) => Variant::Nothing,
@@ -133,7 +133,7 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     for rule in rules {
         let a = table.get(rule.property_name());
         if a.is_nothing() {
-            let b = rule.fire(table.view());
+            let b = rule.fire(&table);
             if !b.is_nothing() {
                 table.insert(rule.property_name().clone(), b);
                 changes += 1;
@@ -159,7 +159,7 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<
         let mut changes = 0;
 
         for rule in rules {
-            let value = rule.fire(table.view());
+            let value = rule.fire(&table);
             if !value.is_nothing() {
                 let prev = table.get(rule.property_name());
                 match prev.join(value) {

@@ -55,34 +55,60 @@ impl<A: Model> Property<A> {
 pub struct Table(HashMap<Ident, Variant>);
 
 impl Table {
+    /// Create an empty Table
     pub fn new() -> Self {
         Self(HashMap::new())
     }
 
-    pub fn kv(name: Ident, value: Variant) -> Self {
-        let mut map = HashMap::new();
-        map.insert(name, value);
-        Self(map)
-    }
-
+    /// Untyped access to a property value
     pub fn get(&self, name: &Ident) -> Variant {
         self.0.get(name).cloned().unwrap_or(Variant::Nothing)
     }
 
+    /// Insert an entry into the Table.
     pub fn insert(&mut self, name: Ident, value: Variant) -> Variant {
         self.0.insert(name, value).unwrap_or(Variant::Nothing)
     }
 
-    pub fn view<'a>(&'a self) -> View<'a> {
-        View(&self)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = (&Ident, &Variant)> {
-        self.0.iter()
-    }
-
+    /// Iterate the contents, consuming this Table.
     pub fn into_iter(self) -> impl Iterator<Item = (Ident, Variant)> {
         self.0.into_iter()
+    }
+
+    /// Typed access to the value of a property or path.
+    pub fn get1<A>(&self, prop1: &impl PropOrPath<A>) -> Option<A>
+    where
+        A: Model,
+    {
+        prop1.extract(&self)
+    }
+
+    /// Typed access to the joint values of a pair of properties or paths.
+    pub fn get2<A, B>(
+        &self,
+        prop1: &impl PropOrPath<A>,
+        prop2: &impl PropOrPath<B>,
+    ) -> Option<(A, B)>
+    where
+        A: Model,
+        B: Model,
+    {
+        Some((self.get1(prop1)?, self.get1(prop2)?))
+    }
+
+    /// Typed access to the joint values of a triplet of properties or paths.
+    pub fn get3<A, B, C>(
+        &self,
+        prop1: &impl PropOrPath<A>,
+        prop2: &impl PropOrPath<B>,
+        prop3: &impl PropOrPath<C>,
+    ) -> Option<(A, B, C)>
+    where
+        A: Model,
+        B: Model,
+        C: Model,
+    {
+        Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
     }
 }
 
@@ -119,7 +145,7 @@ impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     }
 }
 
-/// A rule can refer to data in a `View` uniformly by `Property` or `Path`.
+/// A rule can refer to data in a `Table` uniformly by `Property` or `Path`.
 pub trait PropOrPath<A> {
     fn extract(&self, table: &Table) -> Option<A>;
 }
@@ -143,44 +169,5 @@ impl<A: Model> PropOrPath<A> for Path<A> {
             table.get(&self.subject.name)
         };
         v.try_into().ok()
-    }
-}
-
-/// A `View` provides typed access to a `Table` via
-/// `Property` or `Path` keys.
-pub struct View<'a>(&'a Table);
-
-impl<'a> View<'a> {
-    pub fn get1<A>(&self, prop1: &impl PropOrPath<A>) -> Option<A>
-    where
-        A: Model,
-    {
-        prop1.extract(&self.0)
-    }
-
-    pub fn get2<A, B>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-    ) -> Option<(A, B)>
-    where
-        A: Model,
-        B: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?))
-    }
-
-    pub fn get3<A, B, C>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-        prop3: &impl PropOrPath<C>,
-    ) -> Option<(A, B, C)>
-    where
-        A: Model,
-        B: Model,
-        C: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
     }
 }
