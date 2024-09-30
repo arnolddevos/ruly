@@ -70,9 +70,8 @@ impl Variant {
 pub struct Set(HashSet<Ident>);
 
 impl Set {
-    /// The HashSet::union method doesn't give me this signature.
-    /// TODO: investigate.
-    pub fn union(self, other: Set) -> Set {
+    /// Consuming version of set union.
+    fn union(self, other: Set) -> Set {
         let (Set(mut x), Set(y)) = if self.0.len() >= other.0.len() {
             (self, other)
         } else {
@@ -86,15 +85,11 @@ impl Set {
         use JoinResult::*;
         use Variant::Set;
 
-        if self.is_superset(&other) {
+        if self.0.is_superset(&other.0) {
             Hold(Set(self))
         } else {
             Promote(Set(self.union(other)))
         }
-    }
-
-    pub fn is_superset(&self, other: &Set) -> bool {
-        self.0.is_superset(&other.0)
     }
 }
 
