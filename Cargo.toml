@@ -1,0 +1,19 @@
+[package]
+name = "ruly"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "A rule system"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = { version = "0.4", features = ["serde", "clock"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+derive_more = { version = "1", features = [
+    "from",
+    "try_into",
+    "error",
+    "display",
+] }
