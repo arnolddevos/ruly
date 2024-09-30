@@ -1,5 +1,5 @@
-use super::{
-    property::{Ident, Model, Property, Table, View},
+use crate::{
+    property::{Ident, Model, PropOrPath, Property, Table, View},
     variant::{Error, JoinResult, Variant},
 };
 
@@ -25,7 +25,11 @@ where
 }
 
 /// A typed rule with one explicit dependency.
-pub fn rule1<A, B, F>(prop1: Property<A>, prop: Property<B>, func: F) -> Box<dyn Propagator>
+pub fn rule1<A, B, F>(
+    prop1: impl PropOrPath<A> + 'static,
+    prop: Property<B>,
+    func: F,
+) -> Box<dyn Propagator>
 where
     A: Model + 'static,
     B: Model + 'static,
@@ -36,8 +40,8 @@ where
 
 /// A typed rule with two explicit dependencies.
 pub fn rule2<A, B, C, F>(
-    prop1: Property<A>,
-    prop2: Property<B>,
+    prop1: impl PropOrPath<A> + 'static,
+    prop2: impl PropOrPath<B> + 'static,
     prop: Property<C>,
     func: F,
 ) -> Box<dyn Propagator>
@@ -52,9 +56,9 @@ where
 
 /// A typed rule with three explicit dependencies.
 pub fn rule3<A, B, C, D, F>(
-    prop1: Property<A>,
-    prop2: Property<B>,
-    prop3: Property<C>,
+    prop1: impl PropOrPath<A> + 'static,
+    prop2: impl PropOrPath<B> + 'static,
+    prop3: impl PropOrPath<C> + 'static,
     prop: Property<D>,
     func: F,
 ) -> Box<dyn Propagator>
@@ -143,9 +147,17 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
 /// Rule order is unimportant.
 /// The strategy is called naive evaluation in the lit.  
 /// Naive is the best we can do because the rules are opaque.
-pub fn evaluate_naive(table: &mut Table, rules: &Rules) {
+/// Rules or combinations of rules that diverge are caught by an iteration limit.
+pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<usize, Error> {
+    let mut iteration = 0;
     loop {
+        iteration += 1;
+        if iteration > limit {
+            break Err(Error::Detail(format!("exhausted {limit} iterations ")));
+        }
+
         let mut changes = 0;
+
         for rule in rules {
             let value = rule.fire(table.view());
             if !value.is_nothing() {
@@ -159,8 +171,9 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules) {
                 }
             }
         }
+
         if changes == 0 {
-            break;
+            break Ok(iteration);
         }
     }
 }
