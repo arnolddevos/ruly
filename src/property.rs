@@ -1,18 +1,42 @@
-use super::variant::Variant;
+use crate::variant::Variant;
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::iter::empty;
 use std::ops::Div;
 use std::{marker::PhantomData, rc::Rc, str::FromStr};
 
+/// A type used in a rule or property must implement the `Model` marker trait.
+/// This implies it implements the string and `Variant` conversion traits mentioned.
+pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
+
+/// An `Ident` identifies a property or (see `Variant`) an element of a set.
 #[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
 pub struct Ident(Rc<str>);
 
-#[derive(PartialEq, Eq, Hash, Debug, Clone)]
+/// A property gives a name (`Ident`) and canonical type of a value.
+/// A property is also supposed to confer some meaning to a value,
+/// ie its interpretation or what it represents.
+/// If two properties have the same name they are equal.
+/// Equal properties should have the same type (but this is not enforced).
+#[derive(Eq, Hash, Debug)]
 pub struct Property<A> {
     pub name: Ident,
     marker: PhantomData<A>,
+}
+
+impl<A> Clone for Property<A> {
+    fn clone(&self) -> Self {
+        Self {
+            name: self.name.clone(),
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<A, B> PartialEq<Property<B>> for Property<A> {
+    fn eq(&self, other: &Property<B>) -> bool {
+        self.name == other.name
+    }
 }
 
 impl<A: Model> Property<A> {
@@ -24,8 +48,9 @@ impl<A: Model> Property<A> {
     }
 }
 
-pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
-
+/// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
+/// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
+/// and the corresponding `Variant` represents an `A` value.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Table(HashMap<Ident, Variant>);
 
@@ -33,6 +58,13 @@ impl Table {
     pub fn new() -> Self {
         Self(HashMap::new())
     }
+
+    pub fn kv(name: Ident, value: Variant) -> Self {
+        let mut map = HashMap::new();
+        map.insert(name, value);
+        Self(map)
+    }
+
     pub fn get(&self, name: &Ident) -> Variant {
         self.0.get(name).cloned().unwrap_or(Variant::Nothing)
     }
@@ -54,101 +86,100 @@ impl Table {
     }
 }
 
+/// A `Path` designates a property in a nested `Table`.
+/// Tables can be nested to any depth because a `Variant` value can be a `Table`.
+/// A `Path` is constructed by connecting `Property`s with the `/` operator.
 #[derive(Debug, Clone)]
 pub struct Path<A> {
     prefix: Vec<Ident>,
     subject: Property<A>,
 }
 
-impl<A> Div<Property<A>> for Property<Rc<Table>> {
+impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
     type Output = Path<A>;
 
-    fn div(self, rhs: Property<A>) -> Self::Output {
+    fn div(self, rhs: &Property<A>) -> Self::Output {
         Path::<A> {
-            prefix: Vec::from([self.name]),
-            subject: rhs,
+            prefix: Vec::from([self.name.clone()]),
+            subject: rhs.clone(),
         }
     }
 }
 
-impl<A> Div<Property<A>> for Path<Rc<Table>> {
+impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     type Output = Path<A>;
 
-    fn div(self, rhs: Property<A>) -> Self::Output {
+    fn div(self, rhs: &Property<A>) -> Self::Output {
         let mut prefix = self.prefix;
         prefix.push(self.subject.name);
         Path::<A> {
             prefix,
-            subject: rhs,
+            subject: rhs.clone(),
         }
     }
 }
 
+/// A rule can refer to data in a `View` uniformly by `Property` or `Path`.
 pub trait PropOrPath<A> {
-    fn prefix(&self) -> impl Iterator<Item = &Ident>;
-    fn subject(&self) -> &Ident;
+    fn extract(&self, table: &Table) -> Option<A>;
 }
 
-impl<A> PropOrPath<A> for Property<A> {
-    fn prefix(&self) -> impl Iterator<Item = &Ident> {
-        empty()
-    }
-    fn subject(&self) -> &Ident {
-        &self.name
-    }
-}
-impl<A> PropOrPath<A> for Path<A> {
-    fn prefix(&self) -> impl Iterator<Item = &Ident> {
-        self.prefix.iter()
-    }
-    fn subject(&self) -> &Ident {
-        &self.subject.name
+impl<A: Model> PropOrPath<A> for Property<A> {
+    fn extract(&self, table: &Table) -> Option<A> {
+        table.get(&self.name).try_into().ok()
     }
 }
 
-pub struct View<'a>(&'a Table);
-
-impl<'a> View<'a> {
-    pub fn get1<M1>(&self, prop1: &impl PropOrPath<M1>) -> Option<M1>
-    where
-        M1: Model,
-    {
-        let root = self.0;
-        let mut prefix = prop1.prefix();
+impl<A: Model> PropOrPath<A> for Path<A> {
+    fn extract(&self, table: &Table) -> Option<A> {
+        let mut prefix = self.prefix.iter();
         let v = if let Some(next) = prefix.next() {
-            let mut step: Rc<Table> = root.get(next).try_into().ok()?;
+            let mut step: Rc<Table> = TryInto::<Rc<Table>>::try_into(table.get(next)).ok()?;
             for next in prefix {
-                step = step.get(next).try_into().ok()?;
+                step = TryInto::<Rc<Table>>::try_into(step.get(next)).ok()?;
             }
-            step.get(prop1.subject())
+            step.get(&self.subject.name)
         } else {
-            root.get(prop1.subject())
+            table.get(&self.subject.name)
         };
         v.try_into().ok()
     }
+}
 
-    pub fn get2<M1, M2>(
-        &self,
-        prop1: &impl PropOrPath<M1>,
-        prop2: &impl PropOrPath<M2>,
-    ) -> Option<(M1, M2)>
+/// A `View` provides typed access to a `Table` via
+/// `Property` or `Path` keys.
+pub struct View<'a>(&'a Table);
+
+impl<'a> View<'a> {
+    pub fn get1<A>(&self, prop1: &impl PropOrPath<A>) -> Option<A>
     where
-        M1: Model,
-        M2: Model,
+        A: Model,
+    {
+        prop1.extract(&self.0)
+    }
+
+    pub fn get2<A, B>(
+        &self,
+        prop1: &impl PropOrPath<A>,
+        prop2: &impl PropOrPath<B>,
+    ) -> Option<(A, B)>
+    where
+        A: Model,
+        B: Model,
     {
         Some((self.get1(prop1)?, self.get1(prop2)?))
     }
 
-    pub fn get3<M1, M2, M3>(
+    pub fn get3<A, B, C>(
         &self,
-        prop1: &impl PropOrPath<M1>,
-        prop2: &impl PropOrPath<M2>,
-        prop3: &impl PropOrPath<M3>,
-    ) -> Option<(M1, M2, M3)>
+        prop1: &impl PropOrPath<A>,
+        prop2: &impl PropOrPath<B>,
+        prop3: &impl PropOrPath<C>,
+    ) -> Option<(A, B, C)>
     where
-        M1: Model,
-        M2: Model,
-        M3: Model,
+        A: Model,
+        B: Model,
+        C: Model,
     {
         Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
     }
