@@ -60,9 +60,27 @@ impl Table {
         Self(HashMap::new())
     }
 
-    /// Untyped access to a property value
-    pub fn get(&self, name: &Ident) -> Variant {
-        self.0.get(name).cloned().unwrap_or(Variant::Nothing)
+    pub fn join_mut(&mut self, other: Self) -> bool {
+        let mut modified = false;
+        for (k, v) in other.0 {
+            if let Some(u) = self.0.get_mut(&k) {
+                modified |= u.join_mut(v)
+            } else {
+                self.0.insert(k, v);
+                modified = true;
+            }
+        }
+        modified
+    }
+
+    /// Untyped mutable access
+    pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
+        self.0.get_mut(name)
+    }
+
+    /// Typed mutable access
+    pub fn get(&self, name: &Ident) -> Option<&Variant> {
+        self.0.get(name)
     }
 
     /// Insert an entry into the Table.
@@ -152,7 +170,7 @@ pub trait PropOrPath<A> {
 
 impl<A: Model> PropOrPath<A> for Property<A> {
     fn extract(&self, table: &Table) -> Option<A> {
-        table.get(&self.name).try_into().ok()
+        table.get(&self.name)?.clone().try_into().ok()
     }
 }
 
@@ -160,14 +178,14 @@ impl<A: Model> PropOrPath<A> for Path<A> {
     fn extract(&self, table: &Table) -> Option<A> {
         let mut prefix = self.prefix.iter();
         let v = if let Some(next) = prefix.next() {
-            let mut step: Rc<Table> = TryInto::<Rc<Table>>::try_into(table.get(next)).ok()?;
+            let mut step = table.get(next)?.as_table()?;
             for next in prefix {
-                step = TryInto::<Rc<Table>>::try_into(step.get(next)).ok()?;
+                step = step.get(next)?.as_table()?;
             }
-            step.get(&self.subject.name)
+            step.get(&self.subject.name)?
         } else {
-            table.get(&self.subject.name)
+            table.get(&self.subject.name)?
         };
-        v.try_into().ok()
+        v.clone().try_into().ok()
     }
 }

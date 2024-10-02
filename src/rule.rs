@@ -1,6 +1,6 @@
 use crate::{
     property::{Ident, Model, PropOrPath, Property, Table},
-    variant::{Error, JoinResult, Variant},
+    variant::{Error, Variant},
 };
 
 /// The monomorphic view of a rule used in the evaluators.
@@ -131,12 +131,13 @@ pub type Rules = Vec<Box<dyn Propagator>>;
 pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     let mut changes = 0;
     for rule in rules {
-        let a = table.get(rule.property_name());
-        if a.is_nothing() {
-            let b = rule.fire(&table);
-            if !b.is_nothing() {
-                table.insert(rule.property_name().clone(), b);
-                changes += 1;
+        if let Some(a) = table.get(rule.property_name()) {
+            if a.is_nothing() {
+                let b = rule.fire(&table);
+                if !b.is_nothing() {
+                    table.insert(rule.property_name().clone(), b);
+                    changes += 1;
+                }
             }
         }
     }
@@ -161,13 +162,13 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<
         for rule in rules {
             let value = rule.fire(&table);
             if !value.is_nothing() {
-                let prev = table.get(rule.property_name());
-                match prev.join(value) {
-                    JoinResult::Hold(_) => (),
-                    JoinResult::Promote(value) => {
-                        table.insert(rule.property_name().clone(), value);
-                        changes += 1;
+                if let Some(extant) = table.get_mut(rule.property_name()) {
+                    if extant.join_mut(value) {
+                        changes = 1;
                     }
+                } else {
+                    table.insert(rule.property_name().clone(), value);
+                    changes += 1;
                 }
             }
         }
