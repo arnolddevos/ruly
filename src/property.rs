@@ -173,16 +173,10 @@ impl<A: Model> PropOrPath<A> for Property<A> {
 
 impl<A: Model> PropOrPath<A> for Path<A> {
     fn extract(&self, table: &Table) -> Option<A> {
-        let mut prefix = self.prefix.iter();
-        let v = if let Some(next) = prefix.next() {
-            let mut step = table.get(next)?.as_table()?;
-            for next in prefix {
-                step = step.get(next)?.as_table()?;
-            }
-            step.get(&self.subject.name)?
-        } else {
-            table.get(&self.subject.name)?
-        };
-        v.clone().try_into().ok()
+        let mut step = table;
+        for next in self.prefix.iter() {
+            step = step.get(next)?.as_table()?;
+        }
+        step.get(&self.subject.name)?.clone().try_into().ok()
     }
 }
