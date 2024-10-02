@@ -1,17 +1,11 @@
-use crate::variant::Variant;
-use derive_more::{Display, From};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::variant::{Ident, Table, Variant};
+use derive_more::From;
 use std::ops::Div;
-use std::{marker::PhantomData, rc::Rc, str::FromStr};
+use std::{marker::PhantomData, str::FromStr};
 
 /// A type used in a rule or property must implement the `Model` marker trait.
 /// This implies it implements the string and `Variant` conversion traits mentioned.
 pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
-
-/// An `Ident` identifies a property or (see `Variant`) an element of a set.
-#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
-pub struct Ident(Rc<str>);
 
 /// A property gives a name (`Ident`) and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
@@ -23,6 +17,10 @@ pub struct Property<A> {
     pub name: Ident,
     marker: PhantomData<A>,
 }
+
+impl Model for String {}
+
+// pub static FRED: Property<String> = Property::new("fred".to_string());
 
 impl<A> Clone for Property<A> {
     fn clone(&self) -> Self {
@@ -48,70 +46,6 @@ impl<A: Model> Property<A> {
     }
 }
 
-/// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
-/// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
-/// and the corresponding `Variant` represents an `A` value.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Table(HashMap<Ident, Variant>);
-
-impl Table {
-    /// Create an empty Table
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    /// Untyped access to a property value
-    pub fn get(&self, name: &Ident) -> Variant {
-        self.0.get(name).cloned().unwrap_or(Variant::Nothing)
-    }
-
-    /// Insert an entry into the Table.
-    pub fn insert(&mut self, name: Ident, value: Variant) -> Variant {
-        self.0.insert(name, value).unwrap_or(Variant::Nothing)
-    }
-
-    /// Iterate the contents, consuming this Table.
-    pub fn into_iter(self) -> impl Iterator<Item = (Ident, Variant)> {
-        self.0.into_iter()
-    }
-
-    /// Typed access to the value of a property or path.
-    pub fn get1<A>(&self, prop1: &impl PropOrPath<A>) -> Option<A>
-    where
-        A: Model,
-    {
-        prop1.extract(&self)
-    }
-
-    /// Typed access to the joint values of a pair of properties or paths.
-    pub fn get2<A, B>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-    ) -> Option<(A, B)>
-    where
-        A: Model,
-        B: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?))
-    }
-
-    /// Typed access to the joint values of a triplet of properties or paths.
-    pub fn get3<A, B, C>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-        prop3: &impl PropOrPath<C>,
-    ) -> Option<(A, B, C)>
-    where
-        A: Model,
-        B: Model,
-        C: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
-    }
-}
-
 /// A `Path` designates a property in a nested `Table`.
 /// Tables can be nested to any depth because a `Variant` value can be a `Table`.
 /// A `Path` is constructed by connecting `Property`s with the `/` operator.
@@ -121,7 +55,7 @@ pub struct Path<A> {
     subject: Property<A>,
 }
 
-impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
+impl<A> Div<&Property<A>> for &Property<Box<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -132,7 +66,7 @@ impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
     }
 }
 
-impl<A> Div<&Property<A>> for Path<Rc<Table>> {
+impl<A> Div<&Property<A>> for Path<Box<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -145,29 +79,37 @@ impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     }
 }
 
-/// A rule can refer to data in a `Table` uniformly by `Property` or `Path`.
-pub trait PropOrPath<A> {
-    fn extract(&self, table: &Table) -> Option<A>;
-}
-
-impl<A: Model> PropOrPath<A> for Property<A> {
-    fn extract(&self, table: &Table) -> Option<A> {
-        table.get(&self.name).try_into().ok()
+impl<A> Into<Path<A>> for &Property<A> {
+    fn into(self) -> Path<A> {
+        Path::<A> {
+            prefix: Vec::new(),
+            subject: self.clone(),
+        }
     }
 }
 
-impl<A: Model> PropOrPath<A> for Path<A> {
-    fn extract(&self, table: &Table) -> Option<A> {
-        let mut prefix = self.prefix.iter();
-        let v = if let Some(next) = prefix.next() {
-            let mut step: Rc<Table> = TryInto::<Rc<Table>>::try_into(table.get(next)).ok()?;
-            for next in prefix {
-                step = TryInto::<Rc<Table>>::try_into(step.get(next)).ok()?;
-            }
-            step.get(&self.subject.name)
-        } else {
-            table.get(&self.subject.name)
-        };
-        v.try_into().ok()
+/// The ability to query a `Table` implemented for `Property` and `Path`.
+pub trait Query {
+    type Output;
+    fn query(&self, table: &Table) -> Option<Self::Output>;
+}
+
+impl<A: Model> Query for Property<A> {
+    type Output = A;
+
+    fn query(&self, table: &Table) -> Option<A> {
+        table.get(&self.name)?.clone().try_into().ok()
+    }
+}
+
+impl<A: Model> Query for Path<A> {
+    type Output = A;
+
+    fn query(&self, table: &Table) -> Option<A> {
+        let mut step = table;
+        for next in self.prefix.iter() {
+            step = step.get(next)?.as_table()?;
+        }
+        step.get(&self.subject.name)?.clone().try_into().ok()
     }
 }

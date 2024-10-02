@@ -1,14 +1,17 @@
-use crate::property::Table;
-
-use super::property::Ident;
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::rc::Rc;
 
-/// A general value.  A monomorphic version of Model type.
+/// A general value.  A monomorphic version of the types used in rules.
+/// `Variant` implements `Lattice` such that
+/// - `Invalid` variants are inferior to all others.
+/// - `Set` variants are joined by union.
+/// - `Table` variants are by joining their values by key.
+/// - Scalar variants are joined if equal.
+/// - Other pairs result in a `Conflict` which is the top of the join lattice.   
 #[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
 pub enum Variant {
     /// Top of the join lattice
@@ -25,43 +28,71 @@ pub enum Variant {
     /// Join by union
     Set(Set),
 
+    /// Join by joining values with equal keys.
     #[display("Table")]
-    Table(Rc<Table>),
+    Table(Box<Table>),
 
     /// A correctable error, below the above
     Invalid(Error),
-
-    /// Bottom of the join lattice
-    Nothing,
 }
 
 impl Variant {
-    /// Combine two variants according to the rules of a join-semilattice.
-    pub fn join(self, other: Self) -> JoinResult {
-        use JoinResult::*;
-        use Variant::*;
-        match (self, other) {
-            (a, Nothing) => Hold(a),
-            (Nothing, b) => Promote(b),
-            (a, Invalid(_)) => Hold(a),
-            (Invalid(_), b) => Promote(b),
-            (a @ Conflict(_, _), _) => Hold(a),
-            (_, b @ Conflict(_, _)) => Promote(b),
-            (Set(x), Set(y)) => x.join(y),
-            (Table(x), Table(y)) => x.join(y),
-            (String(a), String(b)) if a == b => Hold(String(a)),
-            (Date(a), Date(b)) if a == b => Hold(Date(a)),
-            (Instant(a), Instant(b)) if a == b => Hold(Instant(a)),
-            (Float(a), Float(b)) if a == b => Hold(Float(a)),
-            (Int(a), Int(b)) if a == b => Hold(Int(a)),
-            (a, b) => Promote(Conflict(Box::new(a), Box::new(b))),
+    pub fn as_table(&self) -> Option<&Table> {
+        match self {
+            Variant::Table(table) => Some(table),
+            _ => None,
         }
     }
+}
 
-    pub fn is_nothing(&self) -> bool {
-        match self {
-            Variant::Nothing => true,
-            _ => false,
+/// Marks type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
+/// THe join operation combines two values and is closed, associative, commutative and
+/// idempotent.
+///
+/// Idempotent means a.join(b).join(b) == a.join(b) and this makes `join` useful in rule systems.  
+/// There is a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
+/// Where `Lattice` is implemented it may make sense to also implement `PartialOrd`.  
+pub trait Lattice {
+    /// Compute a join in place.  This is useful for values that are expensive to clone.
+    fn join_update(&mut self, other: Self) -> bool;
+
+    /// Compute a join.  By default, defer to `join_update`.
+    fn join(mut self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        self.join_update(other);
+        self
+    }
+}
+
+impl Lattice for Variant {
+    /// Combine two variants according to the rules of a join-semilattice.
+    fn join_update(&mut self, other: Self) -> bool {
+        use Variant::*;
+        match (self, other) {
+            (Set(a), Set(b)) => a.join_update(b),
+            (Table(a), Table(b)) => a.join_update(*b),
+            (String(a), String(b)) if *a == b => false,
+            (Date(a), Date(b)) if *a == b => false,
+            (Instant(a), Instant(b)) if *a == b => false,
+            (Float(a), Float(b)) if *a == b => false,
+            (Int(a), Int(b)) if *a == b => false,
+            (Conflict(_, _), _) => false,
+            (a, b @ Conflict(_, _)) => {
+                *a = b;
+                true
+            }
+            (_, Invalid(_)) => false,
+            (a @ Invalid(_), b) => {
+                *a = b;
+                true
+            }
+            (a, b) => {
+                let a1 = std::mem::replace(a, Int(0));
+                *a = Conflict(Box::new(a1), Box::new(b));
+                true
+            }
         }
     }
 }
@@ -69,27 +100,11 @@ impl Variant {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Set(HashSet<Ident>);
 
-impl Set {
-    /// Consuming version of set union.
-    fn union(self, other: Set) -> Set {
-        let (Set(mut x), Set(y)) = if self.0.len() >= other.0.len() {
-            (self, other)
-        } else {
-            (other, self)
-        };
-        x.extend(y);
-        Set(x)
-    }
-
-    pub fn join(self, other: Set) -> JoinResult {
-        use JoinResult::*;
-        use Variant::Set;
-
-        if self.0.is_superset(&other.0) {
-            Hold(Set(self))
-        } else {
-            Promote(Set(self.union(other)))
-        }
+impl Lattice for Set {
+    fn join_update(&mut self, other: Self) -> bool {
+        let initial = self.0.len();
+        self.0.extend(other.0);
+        self.0.len() > initial
     }
 }
 
@@ -106,41 +121,54 @@ impl Display for Set {
     }
 }
 
+/// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
+/// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
+/// and the corresponding `Variant` represents an `A` value.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Table(HashMap<Ident, Variant>);
+
 impl Table {
-    pub fn join(self: Rc<Self>, other: Rc<Self>) -> JoinResult {
-        use JoinResult::*;
+    /// Create an empty Table
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
 
-        let mut table = Table::new();
-        let mut promoted = false;
+    /// Untyped mutable access
+    pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
+        self.0.get_mut(name)
+    }
 
-        for (name, rhs) in Rc::unwrap_or_clone(other).into_iter() {
-            let lhs = self.get(&name);
-            match lhs.join(rhs) {
-                Hold(_) => {}
-                Promote(value) => {
-                    if !promoted {
-                        table = self.as_ref().clone();
-                    }
-                    table.insert(name, value);
-                    promoted = true;
-                }
-            }
-        }
+    /// Typed mutable access
+    pub fn get(&self, name: &Ident) -> Option<&Variant> {
+        self.0.get(name)
+    }
 
-        if promoted {
-            Promote(Variant::Table(Rc::new(table)))
-        } else {
-            Hold(Variant::Table(self))
-        }
+    /// Insert an entry into the Table.
+    pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
+        self.0.insert(name, value)
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum JoinResult {
-    Hold(Variant),
-    Promote(Variant),
+impl Lattice for Table {
+    fn join_update(&mut self, other: Self) -> bool {
+        let mut modified = false;
+        for (k, v) in other.0 {
+            if let Some(u) = self.0.get_mut(&k) {
+                modified |= u.join_update(v)
+            } else {
+                self.0.insert(k, v);
+                modified = true;
+            }
+        }
+        modified
+    }
 }
 
+/// An `Ident` identifies a property or (see `Variant`) an element of a set.
+#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
+pub struct Ident(String);
+
+/// A skeleton Error type
 #[derive(Debug, Clone, Display, From, Serialize, Deserialize)]
 pub enum Error {
     Detail(String),
