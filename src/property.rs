@@ -18,6 +18,10 @@ pub struct Property<A> {
     marker: PhantomData<A>,
 }
 
+impl Model for String {}
+
+// pub static FRED: Property<String> = Property::new("fred".to_string());
+
 impl<A> Clone for Property<A> {
     fn clone(&self) -> Self {
         Self {

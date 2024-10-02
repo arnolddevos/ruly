@@ -4,7 +4,6 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
-use std::rc::Rc;
 
 /// A general value.  A monomorphic version of the types used in rules.
 /// `Variant` implements `Lattice` such that
@@ -167,7 +166,7 @@ impl Lattice for Table {
 
 /// An `Ident` identifies a property or (see `Variant`) an element of a set.
 #[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
-pub struct Ident(Rc<str>);
+pub struct Ident(String);
 
 /// A skeleton Error type
 #[derive(Debug, Clone, Display, From, Serialize, Deserialize)]
