@@ -74,42 +74,6 @@ impl Table {
     pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
         self.0.insert(name, value)
     }
-
-    /// Typed access to the value of a property or path.
-    pub fn get1<A>(&self, prop1: &impl PropOrPath<A>) -> Option<A>
-    where
-        A: Model,
-    {
-        prop1.extract(&self)
-    }
-
-    /// Typed access to the joint values of a pair of properties or paths.
-    pub fn get2<A, B>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-    ) -> Option<(A, B)>
-    where
-        A: Model,
-        B: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?))
-    }
-
-    /// Typed access to the joint values of a triplet of properties or paths.
-    pub fn get3<A, B, C>(
-        &self,
-        prop1: &impl PropOrPath<A>,
-        prop2: &impl PropOrPath<B>,
-        prop3: &impl PropOrPath<C>,
-    ) -> Option<(A, B, C)>
-    where
-        A: Model,
-        B: Model,
-        C: Model,
-    {
-        Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
-    }
 }
 
 impl Lattice for Table {
@@ -136,7 +100,7 @@ pub struct Path<A> {
     subject: Property<A>,
 }
 
-impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
+impl<A> Div<&Property<A>> for &Property<Box<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -147,7 +111,7 @@ impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
     }
 }
 
-impl<A> Div<&Property<A>> for Path<Rc<Table>> {
+impl<A> Div<&Property<A>> for Path<Box<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -160,19 +124,33 @@ impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     }
 }
 
-/// A rule can refer to data in a `Table` uniformly by `Property` or `Path`.
-pub trait PropOrPath<A> {
-    fn extract(&self, table: &Table) -> Option<A>;
+impl<A> Into<Path<A>> for &Property<A> {
+    fn into(self) -> Path<A> {
+        Path::<A> {
+            prefix: Vec::new(),
+            subject: self.clone(),
+        }
+    }
 }
 
-impl<A: Model> PropOrPath<A> for Property<A> {
-    fn extract(&self, table: &Table) -> Option<A> {
+/// The ability to query a `Table` implemented for `Property` and `Path`.
+pub trait Query {
+    type Output;
+    fn query(&self, table: &Table) -> Option<Self::Output>;
+}
+
+impl<A: Model> Query for Property<A> {
+    type Output = A;
+
+    fn query(&self, table: &Table) -> Option<A> {
         table.get(&self.name)?.clone().try_into().ok()
     }
 }
 
-impl<A: Model> PropOrPath<A> for Path<A> {
-    fn extract(&self, table: &Table) -> Option<A> {
+impl<A: Model> Query for Path<A> {
+    type Output = A;
+
+    fn query(&self, table: &Table) -> Option<A> {
         let mut step = table;
         for next in self.prefix.iter() {
             step = step.get(next)?.as_table()?;

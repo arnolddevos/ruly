@@ -1,9 +1,9 @@
 use crate::{
-    property::{Ident, Model, PropOrPath, Property, Table},
+    property::{Ident, Model, Path, Property, Query, Table},
     variant::{Error, Lattice, Variant},
 };
 
-/// The monomorphic view of a rule used in the evaluators.
+/// The monomorphic state of a rule used in the evaluators.
 pub trait Propagator {
     fn property_name(&self) -> &Ident;
     fn fire(&self, state: &Table) -> Option<Variant>;
@@ -16,33 +16,33 @@ pub struct Rule<A, F> {
 }
 
 /// Create a typed rule and return it as a propagator.
-pub fn rule<A, F>(prop: Property<A>, func: F) -> Box<dyn Propagator>
+pub fn rule<A, F>(prop: &Property<A>, func: F) -> Box<dyn Propagator>
 where
     A: Model + 'static,
     F: Fn(&Table) -> Option<A> + 'static,
 {
-    Box::new(Rule { prop, func })
+    Box::new(Rule {
+        prop: prop.clone(),
+        func,
+    })
 }
 
 /// A typed rule with one explicit dependency.
-pub fn rule1<A, B, F>(
-    prop1: impl PropOrPath<A> + 'static,
-    prop: Property<B>,
-    func: F,
-) -> Box<dyn Propagator>
+pub fn rule1<A, B, F>(prop1: impl Into<Path<A>>, prop: &Property<B>, func: F) -> Box<dyn Propagator>
 where
     A: Model + 'static,
     B: Model + 'static,
     F: Fn(A) -> Option<B> + 'static,
 {
-    rule(prop, move |view| view.get1(&prop1).and_then(&func))
+    let prop1 = prop1.into();
+    rule(prop, move |state| func(prop1.query(state)?))
 }
 
 /// A typed rule with two explicit dependencies.
 pub fn rule2<A, B, C, F>(
-    prop1: impl PropOrPath<A> + 'static,
-    prop2: impl PropOrPath<B> + 'static,
-    prop: Property<C>,
+    prop1: impl Into<Path<A>>,
+    prop2: impl Into<Path<B>>,
+    prop: &Property<C>,
     func: F,
 ) -> Box<dyn Propagator>
 where
@@ -51,15 +51,19 @@ where
     C: Model + 'static,
     F: Fn((A, B)) -> Option<C> + 'static,
 {
-    rule(prop, move |view| view.get2(&prop1, &prop2).and_then(&func))
+    let prop1 = prop1.into();
+    let prop2 = prop2.into();
+    rule(prop, move |state| {
+        func((prop1.query(state)?, prop2.query(state)?))
+    })
 }
 
 /// A typed rule with three explicit dependencies.
 pub fn rule3<A, B, C, D, F>(
-    prop1: impl PropOrPath<A> + 'static,
-    prop2: impl PropOrPath<B> + 'static,
-    prop3: impl PropOrPath<C> + 'static,
-    prop: Property<D>,
+    prop1: impl Into<Path<A>>,
+    prop2: impl Into<Path<B>>,
+    prop3: impl Into<Path<C>>,
+    prop: &Property<D>,
     func: F,
 ) -> Box<dyn Propagator>
 where
@@ -69,8 +73,15 @@ where
     D: Model + 'static,
     F: Fn((A, B, C)) -> Option<D> + 'static,
 {
-    rule(prop, move |view| {
-        view.get3(&prop1, &prop2, &prop3).and_then(&func)
+    let prop1 = prop1.into();
+    let prop2 = prop2.into();
+    let prop3 = prop3.into();
+    rule(prop, move |state| {
+        func((
+            prop1.query(state)?,
+            prop2.query(state)?,
+            prop3.query(state)?,
+        ))
     })
 }
 
@@ -94,12 +105,15 @@ pub struct RuleFallible<A, F> {
 }
 
 /// Create a typed rule and return it as a propagator.
-pub fn rule_fallible<A, F>(prop: Property<A>, func: F) -> Box<dyn Propagator>
+pub fn rule_fallible<A, F>(prop: &Property<A>, func: F) -> Box<dyn Propagator>
 where
     A: Model + 'static,
     F: Fn(&Table) -> Result<Option<A>, Error> + 'static,
 {
-    Box::new(RuleFallible { prop, func })
+    Box::new(RuleFallible {
+        prop: prop.clone(),
+        func,
+    })
 }
 
 impl<A, F> Propagator for RuleFallible<A, F>
