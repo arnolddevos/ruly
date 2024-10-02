@@ -29,19 +29,9 @@ pub enum Variant {
 
     /// A correctable error, below the above
     Invalid(Error),
-
-    /// Bottom of the join lattice
-    Nothing,
 }
 
 impl Variant {
-    pub fn is_nothing(&self) -> bool {
-        match self {
-            Variant::Nothing => true,
-            _ => false,
-        }
-    }
-
     pub fn as_table(&self) -> Option<&Table> {
         match self {
             Variant::Table(table) => Some(table),
@@ -53,8 +43,15 @@ impl Variant {
     pub fn join_mut(&mut self, other: Self) -> bool {
         use Variant::*;
         match (self, other) {
-            (_, Nothing) => false,
-            (a @ Nothing, b) => {
+            (Set(a), Set(b)) => a.join_mut(b),
+            (Table(a), Table(b)) => a.join_mut(*b),
+            (String(a), String(b)) if *a == b => false,
+            (Date(a), Date(b)) if *a == b => false,
+            (Instant(a), Instant(b)) if *a == b => false,
+            (Float(a), Float(b)) if *a == b => false,
+            (Int(a), Int(b)) if *a == b => false,
+            (Conflict(_, _), _) => false,
+            (a, b @ Conflict(_, _)) => {
                 *a = b;
                 true
             }
@@ -63,20 +60,8 @@ impl Variant {
                 *a = b;
                 true
             }
-            (Conflict(_, _), _) => false,
-            (a, b @ Conflict(_, _)) => {
-                *a = b;
-                true
-            }
-            (Set(a), Set(b)) => a.join_mut(b),
-            (Table(a), Table(b)) => a.join_mut(*b),
-            (String(a), String(b)) if *a == b => false,
-            (Date(a), Date(b)) if *a == b => false,
-            (Instant(a), Instant(b)) if *a == b => false,
-            (Float(a), Float(b)) if *a == b => false,
-            (Int(a), Int(b)) if *a == b => false,
             (a, b) => {
-                let a1 = std::mem::replace(a, Nothing);
+                let a1 = std::mem::replace(a, Int(0));
                 *a = Conflict(Box::new(a1), Box::new(b));
                 true
             }

@@ -6,7 +6,7 @@ use crate::{
 /// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
     fn property_name(&self) -> &Ident;
-    fn fire(&self, state: &Table) -> Variant;
+    fn fire(&self, state: &Table) -> Option<Variant>;
 }
 
 /// A typed rule for a given property.
@@ -82,12 +82,8 @@ where
     fn property_name(&self) -> &Ident {
         &self.prop.name
     }
-    fn fire(&self, state: &Table) -> Variant {
-        if let Some(x) = (self.func)(state) {
-            x.into()
-        } else {
-            Variant::Nothing
-        }
+    fn fire(&self, state: &Table) -> Option<Variant> {
+        (self.func)(state).map(|x| x.into())
     }
 }
 
@@ -114,11 +110,11 @@ where
     fn property_name(&self) -> &Ident {
         &self.prop.name
     }
-    fn fire(&self, state: &Table) -> Variant {
+    fn fire(&self, state: &Table) -> Option<Variant> {
         match (self.func)(state) {
-            Ok(Some(x)) => x.into(),
-            Ok(None) => Variant::Nothing,
-            Err(e) => Variant::Invalid(e),
+            Ok(Some(x)) => Some(x.into()),
+            Ok(None) => None,
+            Err(e) => Some(Variant::Invalid(e)),
         }
     }
 }
@@ -131,13 +127,10 @@ pub type Rules = Vec<Box<dyn Propagator>>;
 pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     let mut changes = 0;
     for rule in rules {
-        if let Some(a) = table.get(rule.property_name()) {
-            if a.is_nothing() {
-                let b = rule.fire(&table);
-                if !b.is_nothing() {
-                    table.insert(rule.property_name().clone(), b);
-                    changes += 1;
-                }
+        if table.get(rule.property_name()).is_none() {
+            if let Some(b) = rule.fire(&table) {
+                table.insert(rule.property_name().clone(), b);
+                changes += 1;
             }
         }
     }
@@ -160,8 +153,7 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<
         let mut changes = 0;
 
         for rule in rules {
-            let value = rule.fire(&table);
-            if !value.is_nothing() {
+            if let Some(value) = rule.fire(&table) {
                 if let Some(extant) = table.get_mut(rule.property_name()) {
                     if extant.join_mut(value) {
                         changes = 1;

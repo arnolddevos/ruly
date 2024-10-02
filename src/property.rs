@@ -84,13 +84,8 @@ impl Table {
     }
 
     /// Insert an entry into the Table.
-    pub fn insert(&mut self, name: Ident, value: Variant) -> Variant {
-        self.0.insert(name, value).unwrap_or(Variant::Nothing)
-    }
-
-    /// Iterate the contents, consuming this Table.
-    pub fn into_iter(self) -> impl Iterator<Item = (Ident, Variant)> {
-        self.0.into_iter()
+    pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
+        self.0.insert(name, value)
     }
 
     /// Typed access to the value of a property or path.
