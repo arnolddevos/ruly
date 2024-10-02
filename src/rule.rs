@@ -1,6 +1,6 @@
 use crate::{
-    property::{Ident, Model, Path, Property, Query, Table},
-    variant::{Error, Lattice, Variant},
+    property::{Model, Path, Property, Query},
+    variant::{Error, Ident, Lattice, Table, Variant},
 };
 
 /// The monomorphic state of a rule used in the evaluators.

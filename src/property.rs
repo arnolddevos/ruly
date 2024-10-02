@@ -1,17 +1,11 @@
-use crate::variant::{Lattice, Variant};
-use derive_more::{Display, From};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use crate::variant::{Ident, Table, Variant};
+use derive_more::From;
 use std::ops::Div;
-use std::{marker::PhantomData, rc::Rc, str::FromStr};
+use std::{marker::PhantomData, str::FromStr};
 
 /// A type used in a rule or property must implement the `Model` marker trait.
 /// This implies it implements the string and `Variant` conversion traits mentioned.
 pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
-
-/// An `Ident` identifies a property or (see `Variant`) an element of a set.
-#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
-pub struct Ident(Rc<str>);
 
 /// A property gives a name (`Ident`) and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
@@ -45,49 +39,6 @@ impl<A: Model> Property<A> {
             name: ident.into(),
             marker: PhantomData,
         }
-    }
-}
-
-/// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
-/// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
-/// and the corresponding `Variant` represents an `A` value.
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Table(HashMap<Ident, Variant>);
-
-impl Table {
-    /// Create an empty Table
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    /// Untyped mutable access
-    pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
-        self.0.get_mut(name)
-    }
-
-    /// Typed mutable access
-    pub fn get(&self, name: &Ident) -> Option<&Variant> {
-        self.0.get(name)
-    }
-
-    /// Insert an entry into the Table.
-    pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
-        self.0.insert(name, value)
-    }
-}
-
-impl Lattice for Table {
-    fn join_update(&mut self, other: Self) -> bool {
-        let mut modified = false;
-        for (k, v) in other.0 {
-            if let Some(u) = self.0.get_mut(&k) {
-                modified |= u.join_update(v)
-            } else {
-                self.0.insert(k, v);
-                modified = true;
-            }
-        }
-        modified
     }
 }
 

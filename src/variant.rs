@@ -1,11 +1,10 @@
-use crate::property::Table;
-
-use super::property::Ident;
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
+use std::rc::Rc;
 
 /// A general value.  A monomorphic version of the types used in rules.
 /// `Variant` implements `Lattice` such that
@@ -123,6 +122,54 @@ impl Display for Set {
     }
 }
 
+/// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
+/// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
+/// and the corresponding `Variant` represents an `A` value.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Table(HashMap<Ident, Variant>);
+
+impl Table {
+    /// Create an empty Table
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    /// Untyped mutable access
+    pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
+        self.0.get_mut(name)
+    }
+
+    /// Typed mutable access
+    pub fn get(&self, name: &Ident) -> Option<&Variant> {
+        self.0.get(name)
+    }
+
+    /// Insert an entry into the Table.
+    pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
+        self.0.insert(name, value)
+    }
+}
+
+impl Lattice for Table {
+    fn join_update(&mut self, other: Self) -> bool {
+        let mut modified = false;
+        for (k, v) in other.0 {
+            if let Some(u) = self.0.get_mut(&k) {
+                modified |= u.join_update(v)
+            } else {
+                self.0.insert(k, v);
+                modified = true;
+            }
+        }
+        modified
+    }
+}
+
+/// An `Ident` identifies a property or (see `Variant`) an element of a set.
+#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
+pub struct Ident(Rc<str>);
+
+/// A skeleton Error type
 #[derive(Debug, Clone, Display, From, Serialize, Deserialize)]
 pub enum Error {
     Detail(String),
