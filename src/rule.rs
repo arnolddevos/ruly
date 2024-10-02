@@ -1,6 +1,6 @@
 use crate::{
     property::{Ident, Model, PropOrPath, Property, Table},
-    variant::{Error, Variant},
+    variant::{Error, Lattice, Variant},
 };
 
 /// The monomorphic view of a rule used in the evaluators.
@@ -155,7 +155,7 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<
         for rule in rules {
             if let Some(value) = rule.fire(&table) {
                 if let Some(extant) = table.get_mut(rule.property_name()) {
-                    if extant.join_mut(value) {
+                    if extant.join_update(value) {
                         changes = 1;
                     }
                 } else {

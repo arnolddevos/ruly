@@ -1,4 +1,4 @@
-use crate::variant::Variant;
+use crate::variant::{Lattice, Variant};
 use derive_more::{Display, From};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -60,19 +60,6 @@ impl Table {
         Self(HashMap::new())
     }
 
-    pub fn join_mut(&mut self, other: Self) -> bool {
-        let mut modified = false;
-        for (k, v) in other.0 {
-            if let Some(u) = self.0.get_mut(&k) {
-                modified |= u.join_mut(v)
-            } else {
-                self.0.insert(k, v);
-                modified = true;
-            }
-        }
-        modified
-    }
-
     /// Untyped mutable access
     pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
         self.0.get_mut(name)
@@ -122,6 +109,21 @@ impl Table {
         C: Model,
     {
         Some((self.get1(prop1)?, self.get1(prop2)?, self.get1(prop3)?))
+    }
+}
+
+impl Lattice for Table {
+    fn join_update(&mut self, other: Self) -> bool {
+        let mut modified = false;
+        for (k, v) in other.0 {
+            if let Some(u) = self.0.get_mut(&k) {
+                modified |= u.join_update(v)
+            } else {
+                self.0.insert(k, v);
+                modified = true;
+            }
+        }
+        modified
     }
 }
 

@@ -7,7 +7,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::Display;
 
-/// A general value.  A monomorphic version of Model type.
+/// A general value.  A monomorphic version of the types used in rules.
+/// `Variant` implements `Lattice` such that
+/// - `Invalid` variants are inferior to all others.
+/// - `Set` variants are joined by union.
+/// - `Table` variants are by joining their values by key.
+/// - Scalar variants are joined if equal.
+/// - Other pairs result in a `Conflict` which is the top of the join lattice.   
 #[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
 pub enum Variant {
     /// Top of the join lattice
@@ -24,6 +30,7 @@ pub enum Variant {
     /// Join by union
     Set(Set),
 
+    /// Join by joining values with equal keys.
     #[display("Table")]
     Table(Box<Table>),
 
@@ -38,13 +45,36 @@ impl Variant {
             _ => None,
         }
     }
+}
 
+/// Marks type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
+/// THe join operation combines two values and is closed, associative, commutative and
+/// idempotent.
+///
+/// Idempotent means a.join(b).join(b) == a.join(b) and this makes `join` useful in rule systems.  
+/// There is a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
+/// Where `Lattice` is implemented it may make sense to also implement `PartialOrd`.  
+pub trait Lattice {
+    /// Compute a join in place.  This is useful for values that are expensive to clone.
+    fn join_update(&mut self, other: Self) -> bool;
+
+    /// Compute a join.  By default, defer to `join_update`.
+    fn join(mut self, other: Self) -> Self
+    where
+        Self: Sized,
+    {
+        self.join_update(other);
+        self
+    }
+}
+
+impl Lattice for Variant {
     /// Combine two variants according to the rules of a join-semilattice.
-    pub fn join_mut(&mut self, other: Self) -> bool {
+    fn join_update(&mut self, other: Self) -> bool {
         use Variant::*;
         match (self, other) {
-            (Set(a), Set(b)) => a.join_mut(b),
-            (Table(a), Table(b)) => a.join_mut(*b),
+            (Set(a), Set(b)) => a.join_update(b),
+            (Table(a), Table(b)) => a.join_update(*b),
             (String(a), String(b)) if *a == b => false,
             (Date(a), Date(b)) if *a == b => false,
             (Instant(a), Instant(b)) if *a == b => false,
@@ -72,8 +102,8 @@ impl Variant {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Set(HashSet<Ident>);
 
-impl Set {
-    pub fn join_mut(&mut self, other: Self) -> bool {
+impl Lattice for Set {
+    fn join_update(&mut self, other: Self) -> bool {
         let initial = self.0.len();
         self.0.extend(other.0);
         self.0.len() > initial
