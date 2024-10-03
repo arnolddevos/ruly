@@ -7,7 +7,7 @@ use std::{marker::PhantomData, str::FromStr};
 /// This implies it implements the string and `Variant` conversion traits mentioned.
 pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
 
-/// A property gives a name (`Ident`) and canonical type of a value.
+/// A property gives a name, `Ident`, and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
 /// ie its interpretation or what it represents.
 /// If two properties have the same name they are equal.
@@ -17,10 +17,6 @@ pub struct Property<A> {
     pub name: Ident,
     marker: PhantomData<A>,
 }
-
-impl Model for String {}
-
-// pub static FRED: Property<String> = Property::new("fred".to_string());
 
 impl<A> Clone for Property<A> {
     fn clone(&self) -> Self {
@@ -43,6 +39,15 @@ impl<A: Model> Property<A> {
             name: ident.into(),
             marker: PhantomData,
         }
+    }
+}
+
+/// Construct a Property in a const context e.g.
+/// `pub static FRED: Property<String> = prop("fred");`
+pub const fn prop<A: Model>(name: &'static str) -> Property<A> {
+    Property {
+        name: Ident::Intern(name),
+        marker: PhantomData,
     }
 }
 

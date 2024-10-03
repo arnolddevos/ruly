@@ -3,7 +3,7 @@ use crate::{
     variant::{Error, Ident, Lattice, Table, Variant},
 };
 
-/// The monomorphic state of a rule used in the evaluators.
+/// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
     fn property_name(&self) -> &Ident;
     fn fire(&self, state: &Table) -> Option<Variant>;

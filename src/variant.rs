@@ -1,6 +1,6 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -12,7 +12,7 @@ use std::fmt::Display;
 /// - `Table` variants are by joining their values by key.
 /// - Scalar variants are joined if equal.
 /// - Other pairs result in a `Conflict` which is the top of the join lattice.   
-#[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
+#[derive(Serialize, Clone, Debug, From, TryInto, Display)]
 pub enum Variant {
     /// Top of the join lattice
     #[display("conflict {} {}", _0, _1)]
@@ -45,15 +45,17 @@ impl Variant {
     }
 }
 
-/// Marks type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
-/// THe join operation combines two values and is closed, associative, commutative and
-/// idempotent.
+/// Marks a type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
+/// The join operation combines two values and is closed, associative, commutative and idempotent.
 ///
-/// Idempotent means a.join(b).join(b) == a.join(b) and this makes `join` useful in rule systems.  
-/// There is a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
-/// Where `Lattice` is implemented it may make sense to also implement `PartialOrd`.  
+/// This means a.join(b).join(b) == a.join(b) which makes `join` useful in rule systems
+/// that iterate joins to reach a fixed point.
+///   
+/// A lattice has a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
+/// When implementing `Lattice` it may make sense to also implement `PartialOrd`.  
 pub trait Lattice {
-    /// Compute a join in place.  This is useful for values that are expensive to clone.
+    /// Compute a join in place. Return `true` iff self is updated.
+    /// This is useful for values that are expensive to clone.
     fn join_update(&mut self, other: Self) -> bool;
 
     /// Compute a join.  By default, defer to `join_update`.
@@ -97,7 +99,8 @@ impl Lattice for Variant {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+/// A set of `Ident`s.  This implements `Lattice` and `join` is by set union.
+#[derive(Serialize, Debug, Clone)]
 pub struct Set(HashSet<Ident>);
 
 impl Lattice for Set {
@@ -124,7 +127,9 @@ impl Display for Set {
 /// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
 /// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
 /// and the corresponding `Variant` represents an `A` value.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+///
+/// `Table` implements `Lattice`.  Joining a table joins values of the same key.
+#[derive(Debug, Serialize, Clone)]
 pub struct Table(HashMap<Ident, Variant>);
 
 impl Table {
@@ -133,12 +138,12 @@ impl Table {
         Self(HashMap::new())
     }
 
-    /// Untyped mutable access
+    /// Mutable access to a value
     pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
         self.0.get_mut(name)
     }
 
-    /// Typed mutable access
+    /// Borrow a value
     pub fn get(&self, name: &Ident) -> Option<&Variant> {
         self.0.get(name)
     }
@@ -164,12 +169,16 @@ impl Lattice for Table {
     }
 }
 
-/// An `Ident` identifies a property or (see `Variant`) an element of a set.
-#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
-pub struct Ident(String);
+/// An `Ident` identifies a property or an element of a set.
+#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize)]
+pub enum Ident {
+    NonIntern(String),
+    Intern(&'static str),
+    Anonymous(u64),
+}
 
 /// A skeleton Error type
-#[derive(Debug, Clone, Display, From, Serialize, Deserialize)]
+#[derive(Debug, Clone, Display, From, Serialize)]
 pub enum Error {
     Detail(String),
 }
