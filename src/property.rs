@@ -6,6 +6,7 @@ use std::{marker::PhantomData, str::FromStr};
 /// A type used in a rule or property must implement the `Model` marker trait.
 /// This implies it implements the string and `Variant` conversion traits mentioned.
 pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
+impl<A> Model for A where A: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
 
 /// A property gives a name, `Ident`, and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
