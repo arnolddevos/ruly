@@ -1,12 +1,7 @@
 use crate::variant::{Ident, Table, Variant};
 use derive_more::From;
+use std::marker::PhantomData;
 use std::ops::Div;
-use std::{marker::PhantomData, str::FromStr};
-
-/// A type used in a rule or property must implement the `Model` marker trait.
-/// This implies it implements the string and `Variant` conversion traits mentioned.
-pub trait Model: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
-impl<A> Model for A where A: FromStr + ToString + TryFrom<Variant> + Into<Variant> {}
 
 /// A property gives a name, `Ident`, and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
@@ -34,7 +29,7 @@ impl<A, B> PartialEq<Property<B>> for Property<A> {
     }
 }
 
-impl<A: Model> Property<A> {
+impl<A> Property<A> {
     pub fn new(ident: impl Into<Ident>) -> Self {
         Self {
             name: ident.into(),
@@ -45,7 +40,7 @@ impl<A: Model> Property<A> {
 
 /// Construct a Property in a const context e.g.
 /// `pub static FRED: Property<String> = prop("fred");`
-pub const fn prop<A: Model>(name: &'static str) -> Property<A> {
+pub const fn prop<A>(name: &'static str) -> Property<A> {
     Property {
         name: Ident::Intern(name),
         marker: PhantomData,
@@ -100,7 +95,7 @@ pub trait Query {
     fn query(&self, table: &Table) -> Option<Self::Output>;
 }
 
-impl<A: Model> Query for Property<A> {
+impl<A: TryFrom<Variant>> Query for Property<A> {
     type Output = A;
 
     fn query(&self, table: &Table) -> Option<A> {
@@ -108,7 +103,7 @@ impl<A: Model> Query for Property<A> {
     }
 }
 
-impl<A: Model> Query for Path<A> {
+impl<A: TryFrom<Variant>> Query for Path<A> {
     type Output = A;
 
     fn query(&self, table: &Table) -> Option<A> {

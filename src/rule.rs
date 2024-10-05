@@ -1,5 +1,5 @@
 use crate::{
-    property::{Model, Path, Property, Query},
+    property::{Path, Property, Query},
     variant::{Error, Ident, Lattice, Table, Variant},
 };
 
@@ -18,7 +18,7 @@ pub struct Rule<A, F> {
 /// Create a typed rule and return it as a propagator.
 pub fn rule<A, F>(prop: &Property<A>, func: F) -> Box<dyn Propagator>
 where
-    A: Model + 'static,
+    A: Into<Variant> + 'static,
     F: Fn(&Table) -> Option<A> + 'static,
 {
     Box::new(Rule {
@@ -30,8 +30,8 @@ where
 /// A typed rule with one explicit dependency.
 pub fn rule1<A, B, F>(prop1: impl Into<Path<A>>, prop: &Property<B>, func: F) -> Box<dyn Propagator>
 where
-    A: Model + 'static,
-    B: Model + 'static,
+    A: TryFrom<Variant> + 'static,
+    B: Into<Variant> + 'static,
     F: Fn(A) -> Option<B> + 'static,
 {
     let prop1 = prop1.into();
@@ -46,9 +46,9 @@ pub fn rule2<A, B, C, F>(
     func: F,
 ) -> Box<dyn Propagator>
 where
-    A: Model + 'static,
-    B: Model + 'static,
-    C: Model + 'static,
+    A: TryFrom<Variant> + 'static,
+    B: TryFrom<Variant> + 'static,
+    C: Into<Variant> + 'static,
     F: Fn((A, B)) -> Option<C> + 'static,
 {
     let prop1 = prop1.into();
@@ -67,10 +67,10 @@ pub fn rule3<A, B, C, D, F>(
     func: F,
 ) -> Box<dyn Propagator>
 where
-    A: Model + 'static,
-    B: Model + 'static,
-    C: Model + 'static,
-    D: Model + 'static,
+    A: TryFrom<Variant> + 'static,
+    B: TryFrom<Variant> + 'static,
+    C: TryFrom<Variant> + 'static,
+    D: Into<Variant> + 'static,
     F: Fn((A, B, C)) -> Option<D> + 'static,
 {
     let prop1 = prop1.into();
@@ -87,7 +87,7 @@ where
 
 impl<A, F> Propagator for Rule<A, F>
 where
-    A: Model,
+    A: Into<Variant>,
     F: Fn(&Table) -> Option<A>,
 {
     fn property_name(&self) -> &Ident {
@@ -107,7 +107,7 @@ pub struct RuleFallible<A, F> {
 /// Create a typed rule and return it as a propagator.
 pub fn rule_fallible<A, F>(prop: &Property<A>, func: F) -> Box<dyn Propagator>
 where
-    A: Model + 'static,
+    A: Into<Variant> + 'static,
     F: Fn(&Table) -> Result<Option<A>, Error> + 'static,
 {
     Box::new(RuleFallible {
@@ -118,7 +118,7 @@ where
 
 impl<A, F> Propagator for RuleFallible<A, F>
 where
-    A: Model,
+    A: Into<Variant>,
     F: Fn(&Table) -> Result<Option<A>, Error>,
 {
     fn property_name(&self) -> &Ident {
