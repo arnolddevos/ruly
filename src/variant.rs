@@ -1,6 +1,7 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -45,15 +46,17 @@ impl Variant {
     }
 }
 
-/// Marks type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
-/// THe join operation combines two values and is closed, associative, commutative and
-/// idempotent.
+/// Marks a type as a join semi-lattice. See [wikipedia](en.wikipedia.org/wiki/Semilattice).  
+/// The join operation combines two values and is closed, associative, commutative and idempotent.
 ///
-/// Idempotent means a.join(b).join(b) == a.join(b) and this makes `join` useful in rule systems.  
-/// There is a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
-/// Where `Lattice` is implemented it may make sense to also implement `PartialOrd`.  
+/// This means a.join(b).join(b) == a.join(b) which makes `join` useful in rule systems
+/// that iterate joins to reach a fixed point.
+///   
+/// A lattice has a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
+/// When implementing `Lattice` it may make sense to also implement `PartialOrd`.  
 pub trait Lattice {
-    /// Compute a join in place.  This is useful for values that are expensive to clone.
+    /// Compute a join in place. Return `true` iff self is updated.
+    /// This is useful for values that are expensive to clone.
     fn join_update(&mut self, other: Self) -> bool;
 
     /// Compute a join.  By default, defer to `join_update`.
@@ -97,6 +100,7 @@ impl Lattice for Variant {
     }
 }
 
+/// A set of `Ident`s.  This implements `Lattice` and `join` is by set union.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Set(HashSet<Ident>);
 
@@ -124,6 +128,8 @@ impl Display for Set {
 /// A `Table` is a map of `Ident` to `Variant`.  It is monomorphic but
 /// represents typed data. Each `Ident` represents a `Property<A>` for some type `A`
 /// and the corresponding `Variant` represents an `A` value.
+///
+/// `Table` implements `Lattice`.  Joining a table joins values of the same key.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Table(HashMap<Ident, Variant>);
 
@@ -133,12 +139,12 @@ impl Table {
         Self(HashMap::new())
     }
 
-    /// Untyped mutable access
+    /// Mutable access to a value
     pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
         self.0.get_mut(name)
     }
 
-    /// Typed mutable access
+    /// Borrow a value
     pub fn get(&self, name: &Ident) -> Option<&Variant> {
         self.0.get(name)
     }
@@ -164,9 +170,47 @@ impl Lattice for Table {
     }
 }
 
-/// An `Ident` identifies a property or (see `Variant`) an element of a set.
-#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone, Serialize, Deserialize)]
-pub struct Ident(String);
+/// An `Ident` identifies a property or an element of a set.
+#[derive(PartialEq, Eq, Hash, Debug, Display, From, Clone)]
+pub enum Ident {
+    NonIntern(String),
+    Intern(&'static str),
+    Anonymous(u64),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ExternalIdent {
+    NonIntern(String),
+    Anonymous(u64),
+}
+
+impl Serialize for Ident {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let x = match self {
+            Ident::NonIntern(i) => ExternalIdent::NonIntern(i.clone()),
+            Ident::Intern(i) => ExternalIdent::NonIntern(i.to_string()),
+            Ident::Anonymous(i) => ExternalIdent::Anonymous(*i),
+        };
+        x.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for Ident {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let x: ExternalIdent = ExternalIdent::deserialize(deserializer)?;
+        match x {
+            ExternalIdent::NonIntern(i) => Ok(Ident::NonIntern(i)),
+            ExternalIdent::Anonymous(i) => Ok(Ident::Anonymous(i)),
+        }
+    }
+}
 
 /// A skeleton Error type
 #[derive(Debug, Clone, Display, From, Serialize, Deserialize)]
@@ -174,4 +218,19 @@ pub enum Error {
     Detail(String),
 }
 
+impl From<&str> for Error {
+    fn from(value: &str) -> Self {
+        Error::Detail(value.to_string())
+    }
+}
+
 impl std::error::Error for Error {}
+
+impl<A: Into<Variant>> From<Result<A, Error>> for Variant {
+    fn from(value: Result<A, Error>) -> Self {
+        match value {
+            Ok(a) => a.into(),
+            Err(e) => e.into(),
+        }
+    }
+}
