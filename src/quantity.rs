@@ -3,7 +3,11 @@ use crate::{
     variant::{Error, Variant},
 };
 use regex::Regex;
-use std::{fmt::Display, str::FromStr, sync::LazyLock};
+use std::{
+    fmt::{Debug, Display},
+    str::FromStr,
+    sync::LazyLock,
+};
 
 /// `Quantity` and `Value` help to define new types for `Property`s.
 ///
@@ -29,6 +33,46 @@ pub trait Quantity {
 /// A wrapper for `Quantity` representations.  Essentially a _newtype_ for `Quantity::Repr`.
 /// Blank implimentations are defined for `TryFrom<Variant>`, `Into<Variant>`, `FromStr` and `Display`.
 pub struct Value<Q: Quantity>(Q::Repr);
+
+impl<Q: Quantity> Value<Q> {
+    pub fn from_repr(repr: Q::Repr) -> Self {
+        Self(repr)
+    }
+
+    pub fn to_repr(self) -> Q::Repr {
+        self.0
+    }
+}
+
+impl<Q> Clone for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Clone,
+{
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<Q> Debug for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Value").field(&self.0).finish()
+    }
+}
+
+impl<Q> PartialEq for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
 impl<Q> From<Value<Q>> for Variant
 where
@@ -87,7 +131,7 @@ impl Quantity for Currency {
     fn format(value: &Self::Repr) -> String {
         let value = *value;
         let sign = if value < 0 { "-" } else { "" };
-        let digits = format!("{:}", value.abs());
+        let digits = format!("{:03}", value.abs());
         let split = digits.len() - 2;
         let whole = &digits[..split];
         let cents = &digits[split..];
@@ -103,6 +147,8 @@ impl Quantity for Currency {
                 (?:   # a leading sign
                     (?<sign1>[+-])\s*[$]?\s*
                 )|
+
+                
                 (?:   # a leading symbol
                     [$]\s*(?<sign2>[+-])?\s*
                 )|
@@ -153,5 +199,36 @@ impl Quantity for Currency {
             }
         }
         Ok(amount)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn currency_formating() {
+        type C = Value<Currency>;
+        assert_eq!(C::from_repr(9).to_string(), "$0.09");
+        assert_eq!(C::from_repr(-9).to_string(), "-$0.09");
+        assert_eq!(C::from_repr(79).to_string(), "$0.79");
+        assert_eq!(C::from_repr(-79).to_string(), "-$0.79");
+        assert_eq!(C::from_repr(101).to_string(), "$1.01");
+        assert_eq!(C::from_repr(-101).to_string(), "-$1.01");
+        assert_eq!(C::from_repr(1234).to_string(), "$12.34");
+        assert_eq!(C::from_repr(-1234).to_string(), "-$12.34");
+    }
+
+    #[test]
+    fn currency_parsing() {
+        type C = Value<Currency>;
+        assert_eq!(C::from_repr(9), "$0.09".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(-9), "-$0.09".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(79), "$0.79".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(-79), "-$0.79".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(101), "$1.01".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(-101), "-$1.01".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(1234), "$12.34".parse::<C>().unwrap());
+        assert_eq!(C::from_repr(-1234), "-$12.34".parse::<C>().unwrap());
     }
 }
