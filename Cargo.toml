@@ -11,9 +11,14 @@ description = "A rule system"
 chrono = { version = "0.4", features = ["serde", "clock"] }
 serde = { version = "1", features = ["derive", "rc"] }
 serde_json = "1"
+nom = "7"
 derive_more = { version = "1", features = [
     "from",
     "try_into",
     "error",
     "display",
 ] }
+
+[features]
+default = ["quantity"]
+quantity = []
