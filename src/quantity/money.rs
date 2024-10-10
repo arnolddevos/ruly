@@ -131,4 +131,12 @@ mod test {
         assert_eq!(C::from_repr(3400), "34.".parse::<C>().unwrap());
         assert_eq!(C::from_repr(3410), "34.1".parse::<C>().unwrap());
     }
+
+    #[test]
+    fn currency_value_comparisions() {
+        type C = Value<AUD>;
+        assert!(C::from_repr(145) < C::from_repr(155));
+        assert!(C::from_repr(155) == C::from_repr(155));
+        assert!("$12.34".parse::<C>().unwrap() > "1".parse::<C>().unwrap())
+    }
 }

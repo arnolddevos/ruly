@@ -1,5 +1,6 @@
 #![cfg(feature = "quantity")]
 
+pub mod date;
 pub mod money;
 
 use crate::{
@@ -23,7 +24,7 @@ use std::{
 /// blanket implementations of `TryFrom<Variant>` and `Into<Variant>`, which are needed
 /// by the rule system, and `FromStr` and `Display`.
 ///
-/// In the rule system, a property for the quantity has type `Property<Value<Q>>` and
+/// In the rule system, a property for a quantity has type `Property<Value<Q>>` and
 /// can be conveniently defined by function `quant`.
 ///
 /// For example, a `Value<AUD>` is an amount in Australian dollars.
@@ -102,6 +103,30 @@ where
     Q: Quantity,
     Q::Repr: Eq,
 {
+}
+
+// Manual implementation of this trait to provide correct
+// requirements on `Quantity` parameter.
+impl<Q> PartialOrd for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: PartialOrd,
+{
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.partial_cmp(&other.0)
+    }
+}
+
+// Manual implementation of this trait to provide correct
+// requirements on `Quantity` parameter.
+impl<Q> Ord for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Ord,
+{
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.cmp(&other.0)
+    }
 }
 
 impl<Q> From<Value<Q>> for Variant
