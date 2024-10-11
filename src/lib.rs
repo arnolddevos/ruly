@@ -1,4 +1,4 @@
-pub mod builder;
+pub mod propagator;
 pub mod property;
 pub mod quantity;
 pub mod rule;

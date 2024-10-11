@@ -1,59 +1,190 @@
-use crate::variant::{Error, Ident, Lattice, Table, Variant};
+use crate::{
+    propagator::Propagator,
+    property::{Path, Property, Query},
+    variant::{Error, Variant},
+};
 
-/// The monomorphic view of a rule used in the evaluators.
-pub trait Propagator {
-    fn property_name(&self) -> &Ident;
-    fn fire(&self, state: &Table) -> Option<Variant>;
+#[derive(Debug)]
+pub struct Rule<H, T, F> {
+    output: H,
+    input: T,
+    func: F,
 }
 
-pub type Rules = Vec<Box<dyn Propagator>>;
+#[derive(Debug)]
+struct FuncOptional<F>(F);
 
-/// Evaluate rules in priority order. The first result for a given
-/// property stands.  Each rule is evaluated at most once.
-/// Variant::Nothing indicate no result and no joins are performed.  
-pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
-    let mut changes = 0;
-    for rule in rules {
-        if table.get(rule.property_name()).is_none() {
-            if let Some(b) = rule.fire(&table) {
-                table.insert(rule.property_name().clone(), b);
-                changes += 1;
-            }
+#[derive(Debug)]
+struct FuncFallible<F>(F);
+
+pub fn infer<A>(prop: &Property<A>) -> Rule<Property<A>, (), ()> {
+    Rule {
+        output: prop.clone(),
+        input: (),
+        func: (),
+    }
+}
+
+impl<A> Rule<Property<A>, (), ()> {
+    pub fn from<B>(self, path: impl Into<Path<B>>) -> Rule<Property<A>, Path<B>, ()> {
+        Rule {
+            output: self.output,
+            input: path.into(),
+            func: (),
         }
     }
-    changes
 }
 
-/// This recursively joins results until a fixed point is reached.  
-/// Rule order is unimportant.
-/// The strategy is called naive evaluation in the lit.  
-/// Naive is the best we can do because the rules are opaque.
-/// Rules or combinations of rules that diverge are caught by an iteration limit.
-pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<usize, Error> {
-    let mut iteration = 0;
-    loop {
-        iteration += 1;
-        if iteration > limit {
-            break Err(Error::Detail(format!("exhausted {limit} iterations ")));
+impl<A, B> Rule<Property<A>, Path<B>, ()> {
+    pub fn from<C>(self, path: impl Into<Path<C>>) -> Rule<Property<A>, (Path<B>, Path<C>), ()> {
+        Rule {
+            output: self.output,
+            input: (self.input, path.into()),
+            func: (),
         }
+    }
 
-        let mut changes = 0;
+    pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
+    where
+        F: Fn(B) -> Option<A> + 'static,
+        A: Into<Variant> + 'static,
+        B: TryFrom<Variant> + 'static,
+    {
+        Box::new(Rule {
+            output: self.output,
+            input: self.input,
+            func: FuncOptional(func),
+        })
+    }
 
-        for rule in rules {
-            if let Some(value) = rule.fire(&table) {
-                if let Some(extant) = table.get_mut(rule.property_name()) {
-                    if extant.join_update(value) {
-                        changes = 1;
-                    }
-                } else {
-                    table.insert(rule.property_name().clone(), value);
-                    changes += 1;
-                }
-            }
+    pub fn rule_fallible<F>(self, func: F) -> Box<dyn Propagator>
+    where
+        F: Fn(B) -> Result<Option<A>, Error> + 'static,
+        A: Into<Variant> + 'static,
+        B: TryFrom<Variant> + 'static,
+    {
+        Box::new(Rule {
+            output: self.output,
+            input: self.input,
+            func: FuncFallible(func),
+        })
+    }
+}
+
+impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
+    pub fn from<D>(
+        self,
+        path: impl Into<Path<D>>,
+    ) -> Rule<Property<A>, (Path<B>, Path<C>, Path<D>), ()> {
+        Rule {
+            output: self.output,
+            input: (self.input.0, self.input.1, path.into()),
+            func: (),
         }
+    }
 
-        if changes == 0 {
-            break Ok(iteration);
+    pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
+    where
+        F: Fn((B, C)) -> Option<A> + 'static,
+        A: Into<Variant> + 'static,
+        B: TryFrom<Variant> + 'static,
+        C: TryFrom<Variant> + 'static,
+    {
+        Box::new(Rule {
+            output: self.output,
+            input: self.input,
+            func: FuncOptional(func),
+        })
+    }
+}
+
+impl<A, B, C, D> Rule<Property<A>, (Path<B>, Path<C>, Path<D>), ()> {
+    pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
+    where
+        F: Fn((B, C, D)) -> Option<A> + 'static,
+        A: Into<Variant> + 'static,
+        B: TryFrom<Variant> + 'static,
+        C: TryFrom<Variant> + 'static,
+        D: TryFrom<Variant> + 'static,
+    {
+        Box::new(Rule {
+            output: self.output,
+            input: self.input,
+            func: FuncOptional(func),
+        })
+    }
+}
+
+impl<A, B, F> Propagator for Rule<Property<A>, Path<B>, FuncOptional<F>>
+where
+    F: Fn(B) -> Option<A>,
+    A: Into<Variant>,
+    B: TryFrom<Variant>,
+{
+    fn property_name(&self) -> &crate::variant::Ident {
+        &self.output.name
+    }
+
+    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+        Some((self.func.0)(self.input.query(state)?)?.into())
+    }
+}
+
+impl<A, B, F> Propagator for Rule<Property<A>, Path<B>, FuncFallible<F>>
+where
+    F: Fn(B) -> Result<Option<A>, Error>,
+    A: Into<Variant>,
+    B: TryFrom<Variant>,
+{
+    fn property_name(&self) -> &crate::variant::Ident {
+        &self.output.name
+    }
+
+    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+        match (self.func.0)(self.input.query(state)?) {
+            Ok(Some(x)) => Some(x.into()),
+            Ok(None) => None,
+            Err(e) => Some(Variant::Invalid(e)),
         }
+    }
+}
+
+impl<A, B, C, F> Propagator for Rule<Property<A>, (Path<B>, Path<C>), FuncOptional<F>>
+where
+    F: Fn((B, C)) -> Option<A>,
+    A: Into<Variant>,
+    B: TryFrom<Variant>,
+    C: TryFrom<Variant>,
+{
+    fn property_name(&self) -> &crate::variant::Ident {
+        &self.output.name
+    }
+
+    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+        Some((self.func.0)((self.input.0.query(state)?, self.input.1.query(state)?))?.into())
+    }
+}
+
+impl<A, B, C, D, F> Propagator for Rule<Property<A>, (Path<B>, Path<C>, Path<D>), FuncOptional<F>>
+where
+    F: Fn((B, C, D)) -> Option<A>,
+    A: Into<Variant>,
+    B: TryFrom<Variant>,
+    C: TryFrom<Variant>,
+    D: TryFrom<Variant>,
+{
+    fn property_name(&self) -> &crate::variant::Ident {
+        &self.output.name
+    }
+
+    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+        Some(
+            (self.func.0)((
+                self.input.0.query(state)?,
+                self.input.1.query(state)?,
+                self.input.2.query(state)?,
+            ))?
+            .into(),
+        )
     }
 }

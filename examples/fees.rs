@@ -1,8 +1,8 @@
 use ruly::{
-    builder::infer,
+    propagator::Rules,
     property::{prop, Property},
     quantity::{date::Date, money::AUD, Value},
-    rule::Rules,
+    rule::infer,
 };
 
 fn main() {
