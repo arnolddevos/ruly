@@ -10,6 +10,7 @@ use crate::{
 
 use std::{
     fmt::{Debug, Display},
+    ops::{Add, Mul, Neg},
     str::FromStr,
 };
 
@@ -51,12 +52,24 @@ pub const fn quant<Q: Quantity>(name: &'static str) -> Property<Value<Q>> {
 }
 
 impl<Q: Quantity> Value<Q> {
+    /// Construct a `Value` from its representation.
     pub fn from_repr(repr: Q::Repr) -> Self {
         Self(repr)
     }
 
+    /// Reduce a `Value` to its representation
     pub fn to_repr(self) -> Q::Repr {
         self.0
+    }
+}
+
+impl<Q> Value<Q>
+where
+    Q: Quantity<Repr = i64>,
+{
+    /// Scale a `Value` that has an i64 representation
+    pub fn scale(self, factor: f64) -> Self {
+        Self(((self.0 as f64) * factor) as i64)
     }
 }
 
@@ -126,6 +139,45 @@ where
 {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         self.0.cmp(&other.0)
+    }
+}
+
+// A Quantity can be scaled if the representation can be scaled
+impl<Q, S> Mul<S> for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Mul<S, Output = Q::Repr>,
+{
+    type Output = Self;
+
+    fn mul(self, rhs: S) -> Self::Output {
+        Self(self.0 * rhs)
+    }
+}
+
+// A Quantity can be added with the same species if representations can be added
+impl<Q> Add<Self> for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Add<Q::Repr, Output = Q::Repr>,
+{
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        Self(self.0 + rhs.0)
+    }
+}
+
+// A Quantity can be negated if its representation can be negated
+impl<Q> Neg for Value<Q>
+where
+    Q: Quantity,
+    Q::Repr: Neg<Output = Q::Repr>,
+{
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(-self.0)
     }
 }
 
