@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "ruly"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "chrono",
  "derive_more",
