@@ -101,7 +101,7 @@ mod test {
     use crate::quantity::Value;
 
     #[test]
-    fn currency_value_formating() {
+    fn currency_value_formatting() {
         type C = Value<AUD>;
         assert_eq!(C::from_repr(9).to_string(), "$0.09");
         assert_eq!(C::from_repr(-9).to_string(), "-$0.09");
@@ -133,7 +133,7 @@ mod test {
     }
 
     #[test]
-    fn currency_value_comparisions() {
+    fn currency_value_comparisons() {
         type C = Value<AUD>;
         assert!(C::from_repr(145) < C::from_repr(155));
         assert!(C::from_repr(155) == C::from_repr(155));
