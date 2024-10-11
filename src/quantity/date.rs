@@ -1,10 +1,10 @@
 use super::Quantity;
-use chrono::NaiveDate;
+use chrono::{Datelike, NaiveDate};
 
 /// A naive date quantity with opinionated formatting and parsing.
 pub struct Date;
 
-static FORMATS: &[&str] = &["%d/%m/%Y", "%d.%m.%Y", "%Y-%m-%d"];
+static FORMATS: &[&str] = &["%d/%m/%Y", "%F", "%v", "%d.%m.%Y"];
 
 impl Quantity for Date {
     type Repr = NaiveDate;
@@ -12,10 +12,15 @@ impl Quantity for Date {
     fn parse(text: &str) -> Result<Self::Repr, crate::variant::Error> {
         for fmt in FORMATS {
             if let Ok(d) = NaiveDate::parse_from_str(text, fmt) {
+                let d = if d.year() < 100 {
+                    NaiveDate::from_ymd_opt(d.year() + 2000, d.month(), d.day()).unwrap()
+                } else {
+                    d
+                };
                 return Ok(d);
             }
         }
-        Err("invalid date format".into())
+        Err("unrecognised date format".into())
     }
 
     fn format(value: &Self::Repr) -> String {
@@ -38,6 +43,10 @@ mod test {
         assert_eq!(
             C::from_repr(NaiveDate::from_ymd_opt(2001, 5, 23).unwrap()),
             "23.05.2001".parse::<C>().unwrap()
+        );
+        assert_eq!(
+            C::from_repr(NaiveDate::from_ymd_opt(2021, 5, 23).unwrap()),
+            "23/05/21".parse::<C>().unwrap()
         );
         assert_eq!(
             C::from_repr(NaiveDate::from_ymd_opt(2001, 5, 23).unwrap()),
