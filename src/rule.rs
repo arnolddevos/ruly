@@ -1,5 +1,5 @@
 use crate::{
-    propagator::Propagator,
+    propagator::{Dependency, Propagator},
     property::{Path, Property, Query},
     variant::{Error, Variant},
 };
@@ -121,8 +121,12 @@ where
     A: Into<Variant>,
     B: TryFrom<Variant>,
 {
-    fn property_name(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &crate::variant::Ident {
         &self.output.name
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
+        Vec::from([])
     }
 
     fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
@@ -136,8 +140,12 @@ where
     A: Into<Variant>,
     B: TryFrom<Variant>,
 {
-    fn property_name(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &crate::variant::Ident {
         &self.output.name
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
+        Vec::from([self.input.dependency()])
     }
 
     fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
@@ -156,8 +164,12 @@ where
     B: TryFrom<Variant>,
     C: TryFrom<Variant>,
 {
-    fn property_name(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &crate::variant::Ident {
         &self.output.name
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
+        Vec::from([self.input.0.dependency(), self.input.1.dependency()])
     }
 
     fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
@@ -173,8 +185,16 @@ where
     C: TryFrom<Variant>,
     D: TryFrom<Variant>,
 {
-    fn property_name(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &crate::variant::Ident {
         &self.output.name
+    }
+
+    fn dependencies(&self) -> Vec<Dependency> {
+        Vec::from([
+            self.input.0.dependency(),
+            self.input.1.dependency(),
+            self.input.2.dependency(),
+        ])
     }
 
     fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {

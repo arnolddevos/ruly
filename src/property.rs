@@ -1,3 +1,4 @@
+use crate::propagator::Dependency;
 use crate::variant::{Ident, Table, Variant};
 use derive_more::From;
 use std::marker::PhantomData;
@@ -54,6 +55,15 @@ pub const fn prop<A>(name: &'static str) -> Property<A> {
 pub struct Path<A> {
     prefix: Vec<Ident>,
     subject: Property<A>,
+}
+
+impl<A> Path<A> {
+    pub fn dependency(&self) -> Dependency {
+        Dependency {
+            prefix: &self.prefix,
+            subject: &self.subject.name,
+        }
+    }
 }
 
 impl<A> Div<&Property<A>> for &Property<Box<Table>> {

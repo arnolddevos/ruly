@@ -2,8 +2,15 @@ use crate::variant::{Error, Ident, Lattice, Table, Variant};
 
 /// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
-    fn property_name(&self) -> &Ident;
+    fn target(&self) -> &Ident;
+    fn dependencies(&self) -> Vec<Dependency>;
     fn fire(&self, state: &Table) -> Option<Variant>;
+}
+
+#[derive(Debug)]
+pub struct Dependency<'a> {
+    pub prefix: &'a [Ident],
+    pub subject: &'a Ident,
 }
 
 pub type Rules = Vec<Box<dyn Propagator>>;
@@ -14,9 +21,9 @@ pub type Rules = Vec<Box<dyn Propagator>>;
 pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     let mut changes = 0;
     for rule in rules {
-        if table.get(rule.property_name()).is_none() {
+        if table.get(rule.target()).is_none() {
             if let Some(b) = rule.fire(&table) {
-                table.insert(rule.property_name().clone(), b);
+                table.insert(rule.target().clone(), b);
                 changes += 1;
             }
         }
@@ -41,12 +48,12 @@ pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<
 
         for rule in rules {
             if let Some(value) = rule.fire(&table) {
-                if let Some(extant) = table.get_mut(rule.property_name()) {
+                if let Some(extant) = table.get_mut(rule.target()) {
                     if extant.join_update(value) {
                         changes = 1;
                     }
                 } else {
-                    table.insert(rule.property_name().clone(), value);
+                    table.insert(rule.target().clone(), value);
                     changes += 1;
                 }
             }
