@@ -1,16 +1,18 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
-use serde::Deserialize;
-use serde::Serialize;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt::Display;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    rc::Rc,
+};
 
 /// A general value.  A monomorphic version of the types used in rules.
 /// `Variant` implements `Lattice` such that
 /// - `Invalid` variants are inferior to all others.
 /// - `Set` variants are joined by union.
-/// - `Table` variants are by joining their values by key.
+/// - `Table` variants are joined by joining their values by key.
+/// - `Schedule` variants are immutable and are joined if equal.
 /// - Scalar variants are joined if equal.
 /// - Other pairs result in a `Conflict` which is the top of the join lattice.   
 #[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
@@ -26,10 +28,14 @@ pub enum Variant {
     Float(f64),
     Int(i64),
 
+    /// Join if same underlaying table
+    #[display("Shecdule")]
+    Schedule(Rc<Table>),
+
     /// Join by union
     Set(Set),
 
-    /// Join by joining values with equal keys.
+    /// Join by joining members with equal keys.
     #[display("Table")]
     Table(Box<Table>),
 
@@ -41,6 +47,7 @@ impl Variant {
     pub fn as_table(&self) -> Option<&Table> {
         match self {
             Variant::Table(table) => Some(table),
+            Variant::Schedule(table) => Some(table),
             _ => None,
         }
     }
@@ -81,6 +88,7 @@ impl Lattice for Variant {
             (Instant(a), Instant(b)) if *a == b => false,
             (Float(a), Float(b)) if *a == b => false,
             (Int(a), Int(b)) if *a == b => false,
+            (Schedule(a), Schedule(b)) if Rc::ptr_eq(a, &b) => false,
             (Conflict(_, _), _) => false,
             (a, b @ Conflict(_, _)) => {
                 *a = b;
