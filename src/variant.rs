@@ -244,3 +244,17 @@ impl<A: Into<Variant>> From<Result<A, Error>> for Variant {
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn cheap_clones() {
+        let v: Variant = Rc::new(Table::new()).into();
+        let w = v.clone();
+        let t: Rc<Table> = v.try_into().unwrap();
+        let u: Rc<Table> = w.try_into().unwrap();
+        assert!(Rc::ptr_eq(&t, &u))
+    }
+}
