@@ -1,7 +1,7 @@
 use crate::{
     propagator::{Dependency, Propagator},
-    property::{Path, Property, Query},
-    variant::{Error, Variant},
+    property::{Path, Property},
+    variant::{Error, Ident, Table, Variant},
 };
 
 #[derive(Debug)]
@@ -121,7 +121,7 @@ where
     A: Into<Variant>,
     B: TryFrom<Variant>,
 {
-    fn target(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &Ident {
         &self.output.name
     }
 
@@ -129,7 +129,7 @@ where
         Vec::from([])
     }
 
-    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+    fn fire(&self, state: &Table) -> Option<Variant> {
         Some((self.func.0)(self.input.query(state)?)?.into())
     }
 }
@@ -140,7 +140,7 @@ where
     A: Into<Variant>,
     B: TryFrom<Variant>,
 {
-    fn target(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &Ident {
         &self.output.name
     }
 
@@ -148,7 +148,7 @@ where
         Vec::from([self.input.dependency()])
     }
 
-    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+    fn fire(&self, state: &Table) -> Option<Variant> {
         match (self.func.0)(self.input.query(state)?) {
             Ok(Some(x)) => Some(x.into()),
             Ok(None) => None,
@@ -164,7 +164,7 @@ where
     B: TryFrom<Variant>,
     C: TryFrom<Variant>,
 {
-    fn target(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &Ident {
         &self.output.name
     }
 
@@ -172,7 +172,7 @@ where
         Vec::from([self.input.0.dependency(), self.input.1.dependency()])
     }
 
-    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+    fn fire(&self, state: &Table) -> Option<Variant> {
         Some((self.func.0)((self.input.0.query(state)?, self.input.1.query(state)?))?.into())
     }
 }
@@ -185,7 +185,7 @@ where
     C: TryFrom<Variant>,
     D: TryFrom<Variant>,
 {
-    fn target(&self) -> &crate::variant::Ident {
+    fn target(&self) -> &Ident {
         &self.output.name
     }
 
@@ -197,7 +197,7 @@ where
         ])
     }
 
-    fn fire(&self, state: &crate::variant::Table) -> Option<crate::variant::Variant> {
+    fn fire(&self, state: &Table) -> Option<Variant> {
         Some(
             (self.func.0)((
                 self.input.0.query(state)?,

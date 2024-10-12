@@ -1,16 +1,18 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use derive_more::derive::{Display, From, TryInto};
-use serde::Deserialize;
-use serde::Serialize;
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::fmt::Display;
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    rc::Rc,
+};
 
 /// A general value.  A monomorphic version of the types used in rules.
 /// `Variant` implements `Lattice` such that
 /// - `Invalid` variants are inferior to all others.
 /// - `Set` variants are joined by union.
-/// - `Table` variants are by joining their values by key.
+/// - `Table` variants are joined by joining their values by key.
+/// - `Schedule` variants are immutable and are joined if equal.
 /// - Scalar variants are joined if equal.
 /// - Other pairs result in a `Conflict` which is the top of the join lattice.   
 #[derive(Serialize, Deserialize, Clone, Debug, From, TryInto, Display)]
@@ -29,9 +31,9 @@ pub enum Variant {
     /// Join by union
     Set(Set),
 
-    /// Join by joining values with equal keys.
+    /// Join by joining members with equal keys.
     #[display("Table")]
-    Table(Box<Table>),
+    Table(Rc<Table>),
 
     /// A correctable error, below the above
     Invalid(Error),
@@ -75,7 +77,7 @@ impl Lattice for Variant {
         use Variant::*;
         match (self, other) {
             (Set(a), Set(b)) => a.join_update(b),
-            (Table(a), Table(b)) => a.join_update(*b),
+            (Table(a), Table(b)) => join_update_tables(a, b),
             (String(a), String(b)) if *a == b => false,
             (Date(a), Date(b)) if *a == b => false,
             (Instant(a), Instant(b)) if *a == b => false,
@@ -97,6 +99,14 @@ impl Lattice for Variant {
                 true
             }
         }
+    }
+}
+
+fn join_update_tables(a: &mut Rc<Table>, b: Rc<Table>) -> bool {
+    if Rc::ptr_eq(a, &b) {
+        false
+    } else {
+        Rc::make_mut(a).join_update(Rc::unwrap_or_clone(b))
     }
 }
 
@@ -232,5 +242,19 @@ impl<A: Into<Variant>> From<Result<A, Error>> for Variant {
             Ok(a) => a.into(),
             Err(e) => e.into(),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn cheap_clones() {
+        let v: Variant = Rc::new(Table::new()).into();
+        let w = v.clone();
+        let t: Rc<Table> = v.try_into().unwrap();
+        let u: Rc<Table> = w.try_into().unwrap();
+        assert!(Rc::ptr_eq(&t, &u))
     }
 }

@@ -1,8 +1,9 @@
-use crate::propagator::Dependency;
-use crate::variant::{Ident, Table, Variant};
+use crate::{
+    propagator::Dependency,
+    variant::{Ident, Table, Variant},
+};
 use derive_more::From;
-use std::marker::PhantomData;
-use std::ops::Div;
+use std::{marker::PhantomData, ops::Div, rc::Rc};
 
 /// A property gives a name, `Ident`, and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
@@ -48,16 +49,28 @@ pub const fn prop<A>(name: &'static str) -> Property<A> {
     }
 }
 
-/// A `Path` designates a property in a nested `Table`.
+/// A `Path` designates a property that may be in a nested `Table`.
 /// Tables can be nested to any depth because a `Variant` value can be a `Table`.
 /// A `Path` is constructed by connecting `Property`s with the `/` operator.
+/// Also, a single `Property` can be lifted into a `Path`.
 #[derive(Debug, Clone)]
 pub struct Path<A> {
     prefix: Vec<Ident>,
     subject: Property<A>,
 }
 
-impl<A> Path<A> {
+impl<A> Path<A>
+where
+    A: TryFrom<Variant>,
+{
+    pub fn query(&self, table: &Table) -> Option<A> {
+        let mut step = table;
+        for next in self.prefix.iter() {
+            step = step.get(next)?.as_table()?;
+        }
+        step.get(&self.subject.name)?.clone().try_into().ok()
+    }
+
     pub fn dependency(&self) -> Dependency {
         Dependency {
             prefix: &self.prefix,
@@ -66,7 +79,7 @@ impl<A> Path<A> {
     }
 }
 
-impl<A> Div<&Property<A>> for &Property<Box<Table>> {
+impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -77,7 +90,7 @@ impl<A> Div<&Property<A>> for &Property<Box<Table>> {
     }
 }
 
-impl<A> Div<&Property<A>> for Path<Box<Table>> {
+impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -96,31 +109,5 @@ impl<A> Into<Path<A>> for &Property<A> {
             prefix: Vec::new(),
             subject: self.clone(),
         }
-    }
-}
-
-/// The ability to query a `Table` implemented for `Property` and `Path`.
-pub trait Query {
-    type Output;
-    fn query(&self, table: &Table) -> Option<Self::Output>;
-}
-
-impl<A: TryFrom<Variant>> Query for Property<A> {
-    type Output = A;
-
-    fn query(&self, table: &Table) -> Option<A> {
-        table.get(&self.name)?.clone().try_into().ok()
-    }
-}
-
-impl<A: TryFrom<Variant>> Query for Path<A> {
-    type Output = A;
-
-    fn query(&self, table: &Table) -> Option<A> {
-        let mut step = table;
-        for next in self.prefix.iter() {
-            step = step.get(next)?.as_table()?;
-        }
-        step.get(&self.subject.name)?.clone().try_into().ok()
     }
 }
