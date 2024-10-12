@@ -15,9 +15,8 @@ pub struct Dependency<'a> {
 
 pub type Rules = Vec<Box<dyn Propagator>>;
 
-/// Evaluate rules in priority order. The first result for a given
-/// property stands.  Each rule is evaluated at most once.
-/// Variant::Nothing indicate no result and no joins are performed.  
+/// Evaluate rules in priority order. The first result for a given property stands.  
+/// Each rule is evaluated at most once and no joins are performed.  
 pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
     let mut changes = 0;
     for rule in rules {
@@ -34,7 +33,7 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
 /// This recursively joins results until a fixed point is reached.  
 /// Rule order is unimportant.
 /// The strategy is called naive evaluation in the lit.  
-/// Naive is the best we can do because the rules are opaque.
+/// Naive is the best we can do when the rules are opaque.
 /// Rules or combinations of rules that diverge are caught by an iteration limit.
 pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<usize, Error> {
     let mut iteration = 0;
