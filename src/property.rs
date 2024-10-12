@@ -3,7 +3,7 @@ use crate::{
     variant::{Ident, Table, Variant},
 };
 use derive_more::From;
-use std::{marker::PhantomData, ops::Div};
+use std::{marker::PhantomData, ops::Div, rc::Rc};
 
 /// A property gives a name, `Ident`, and canonical type of a value.
 /// A property is also supposed to confer some meaning to a value,
@@ -79,7 +79,7 @@ where
     }
 }
 
-impl<A> Div<&Property<A>> for &Property<Box<Table>> {
+impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
@@ -90,7 +90,7 @@ impl<A> Div<&Property<A>> for &Property<Box<Table>> {
     }
 }
 
-impl<A> Div<&Property<A>> for Path<Box<Table>> {
+impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {

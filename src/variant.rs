@@ -28,16 +28,12 @@ pub enum Variant {
     Float(f64),
     Int(i64),
 
-    /// Join if same underlaying table
-    #[display("Shecdule")]
-    Schedule(Rc<Table>),
-
     /// Join by union
     Set(Set),
 
     /// Join by joining members with equal keys.
     #[display("Table")]
-    Table(Box<Table>),
+    Table(Rc<Table>),
 
     /// A correctable error, below the above
     Invalid(Error),
@@ -47,7 +43,6 @@ impl Variant {
     pub fn as_table(&self) -> Option<&Table> {
         match self {
             Variant::Table(table) => Some(table),
-            Variant::Schedule(table) => Some(table),
             _ => None,
         }
     }
@@ -82,13 +77,12 @@ impl Lattice for Variant {
         use Variant::*;
         match (self, other) {
             (Set(a), Set(b)) => a.join_update(b),
-            (Table(a), Table(b)) => a.join_update(*b),
+            (Table(a), Table(b)) => join_update_tables(a, b),
             (String(a), String(b)) if *a == b => false,
             (Date(a), Date(b)) if *a == b => false,
             (Instant(a), Instant(b)) if *a == b => false,
             (Float(a), Float(b)) if *a == b => false,
             (Int(a), Int(b)) if *a == b => false,
-            (Schedule(a), Schedule(b)) if Rc::ptr_eq(a, &b) => false,
             (Conflict(_, _), _) => false,
             (a, b @ Conflict(_, _)) => {
                 *a = b;
@@ -105,6 +99,14 @@ impl Lattice for Variant {
                 true
             }
         }
+    }
+}
+
+fn join_update_tables(a: &mut Rc<Table>, b: Rc<Table>) -> bool {
+    if Rc::ptr_eq(a, &b) {
+        false
+    } else {
+        Rc::make_mut(a).join_update(Rc::unwrap_or_clone(b))
     }
 }
 
