@@ -236,12 +236,47 @@ impl From<&str> for Error {
 
 impl std::error::Error for Error {}
 
-impl<A: Into<Variant>> From<Result<A, Error>> for Variant {
+impl<A> From<Result<A, Error>> for Variant
+where
+    A: Into<Variant>,
+{
     fn from(value: Result<A, Error>) -> Self {
         match value {
             Ok(a) => a.into(),
             Err(e) => e.into(),
         }
+    }
+}
+
+static CONV_FAIL: &'static str = "numeric conversion failed";
+
+impl From<u32> for Variant {
+    fn from(value: u32) -> Self {
+        (value as i64).into()
+    }
+}
+
+impl TryFrom<Variant> for u32 {
+    type Error = Error;
+
+    fn try_from(value: Variant) -> Result<Self, Self::Error> {
+        let i: i64 = value.try_into().or(Err(CONV_FAIL))?;
+        Ok(i.try_into().or(Err(CONV_FAIL))?)
+    }
+}
+
+impl From<i32> for Variant {
+    fn from(value: i32) -> Self {
+        (value as i64).into()
+    }
+}
+
+impl TryFrom<Variant> for i32 {
+    type Error = Error;
+
+    fn try_from(value: Variant) -> Result<Self, Self::Error> {
+        let i: i64 = value.try_into().or(Err(CONV_FAIL))?;
+        Ok(i.try_into().or(Err(CONV_FAIL))?)
     }
 }
 

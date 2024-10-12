@@ -13,7 +13,7 @@ static _PATIENT: Property<String> = prop("patient");
 static _SERVICE_DATE: Property<Value<Date>> = prop("service_date");
 static ASSIST_51300: Property<Value<AUD>> = prop("assist_51300");
 static ASSIST_51303: Property<f64> = prop("assist_51303");
-static ITEM: Property<i64> = prop("item");
+static ITEM: Property<u32> = prop("item");
 static SURGEON_MBS_FEE: Property<Value<AUD>> = prop("surgeon_mbs_fee");
 static ASSIST_NOGAP_FEE: Property<Value<AUD>> = prop("assist_nogap_fee");
 
