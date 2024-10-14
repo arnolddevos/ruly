@@ -1,5 +1,5 @@
 use ruly::{
-    propagator::Rules,
+    propagator::Propagators,
     property::{prop, Property},
     quantity::{date::Date, money::AUD, Value},
     rule::infer,
@@ -17,7 +17,7 @@ static ITEM: Property<u32> = prop("item");
 static SURGEON_MBS_FEE: Property<Value<AUD>> = prop("surgeon_mbs_fee");
 static ASSIST_NOGAP_FEE: Property<Value<AUD>> = prop("assist_nogap_fee");
 
-fn fees() -> Rules {
+fn fees() -> Propagators {
     Vec::from([
         infer(&ASSIST_NOGAP_FEE)
             .from(&ITEM)

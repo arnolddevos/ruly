@@ -1,23 +1,69 @@
-use crate::variant::{Error, Ident, Lattice, Table, Variant};
+use crate::{
+    table::{Ident, IdentPath, Table},
+    variant::{Error, Lattice, Variant},
+};
 
 /// The monomorphic view of a rule used in the evaluators.
 pub trait Propagator {
     fn target(&self) -> &Ident;
-    fn dependencies(&self) -> Vec<Dependency>;
+    fn dependencies(&self) -> Vec<&IdentPath>;
     fn fire(&self, state: &Table) -> Option<Variant>;
 }
 
-#[derive(Debug)]
-pub struct Dependency<'a> {
-    pub prefix: &'a [Ident],
-    pub subject: &'a Ident,
+/// A corpus of rules
+pub type Propagators = Vec<Box<dyn Propagator>>;
+
+/// A general, untyped `Propagator` of any arity implemented by a function.
+pub struct PropagatorFunc<F> {
+    target: Ident,
+    dependencies: Vec<IdentPath>,
+    func: F,
 }
 
-pub type Rules = Vec<Box<dyn Propagator>>;
+impl<F> PropagatorFunc<F>
+where
+    F: Fn(&[Option<&Variant>]) -> Option<Variant> + 'static,
+{
+    /// Create a general `Propagator`
+    pub fn new(
+        target: Ident,
+        deps: impl IntoIterator<Item = IdentPath>,
+        func: F,
+    ) -> Box<dyn Propagator> {
+        let dependencies = deps.into_iter().collect();
+        Box::new(PropagatorFunc {
+            target,
+            dependencies,
+            func,
+        })
+    }
+}
+
+impl<F> Propagator for PropagatorFunc<F>
+where
+    F: Fn(&[Option<&Variant>]) -> Option<Variant> + 'static,
+{
+    fn target(&self) -> &Ident {
+        &self.target
+    }
+
+    fn dependencies(&self) -> Vec<&IdentPath> {
+        self.dependencies.iter().collect()
+    }
+
+    fn fire(&self, state: &Table) -> Option<Variant> {
+        let input: Vec<Option<&Variant>> = self
+            .dependencies
+            .iter()
+            .map(|p| state.get_path(p))
+            .collect();
+        (self.func)(&input)
+    }
+}
 
 /// Evaluate rules in priority order. The first result for a given property stands.  
 /// Each rule is evaluated at most once and no joins are performed.  
-pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
+pub fn evaluate_priority_once(table: &mut Table, rules: &Propagators) -> usize {
     let mut changes = 0;
     for rule in rules {
         if table.get(rule.target()).is_none() {
@@ -33,9 +79,13 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Rules) -> usize {
 /// This recursively joins results until a fixed point is reached.  
 /// Rule order is unimportant.
 /// The strategy is called naive evaluation in the lit.  
-/// Naive is the best we can do when the rules are opaque.
+/// Naive is the best we can do without using the rule dependency information.
 /// Rules or combinations of rules that diverge are caught by an iteration limit.
-pub fn evaluate_naive(table: &mut Table, rules: &Rules, limit: usize) -> Result<usize, Error> {
+pub fn evaluate_naive(
+    table: &mut Table,
+    rules: &Propagators,
+    limit: usize,
+) -> Result<usize, Error> {
     let mut iteration = 0;
     loop {
         iteration += 1;

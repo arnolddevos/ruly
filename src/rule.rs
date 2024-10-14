@@ -1,7 +1,8 @@
 use crate::{
-    propagator::{Dependency, Propagator},
+    propagator::Propagator,
     property::{Path, Property},
-    variant::{Error, Ident, Table, Variant},
+    table::{Ident, IdentPath, Table},
+    variant::{Error, Variant},
 };
 
 #[derive(Debug)]
@@ -125,7 +126,7 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<&IdentPath> {
         Vec::from([])
     }
 
@@ -144,8 +145,8 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
-        Vec::from([self.input.dependency()])
+    fn dependencies(&self) -> Vec<&IdentPath> {
+        Vec::from([self.input.ident_path()])
     }
 
     fn fire(&self, state: &Table) -> Option<Variant> {
@@ -168,8 +169,8 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
-        Vec::from([self.input.0.dependency(), self.input.1.dependency()])
+    fn dependencies(&self) -> Vec<&IdentPath> {
+        Vec::from([self.input.0.ident_path(), self.input.1.ident_path()])
     }
 
     fn fire(&self, state: &Table) -> Option<Variant> {
@@ -189,11 +190,11 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<&IdentPath> {
         Vec::from([
-            self.input.0.dependency(),
-            self.input.1.dependency(),
-            self.input.2.dependency(),
+            self.input.0.ident_path(),
+            self.input.1.ident_path(),
+            self.input.2.ident_path(),
         ])
     }
 
