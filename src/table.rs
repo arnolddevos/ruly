@@ -2,7 +2,7 @@ use crate::variant::{Lattice, Variant};
 use derive_more::derive::{Display, From};
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{hash_map::Entry, HashMap, HashSet},
     fmt::Display,
 };
 
@@ -15,11 +15,6 @@ impl Table {
     /// Create an empty Table
     pub fn new() -> Self {
         Self(HashMap::new())
-    }
-
-    /// Mutable access to a value
-    pub fn get_mut(&mut self, name: &Ident) -> Option<&mut Variant> {
-        self.0.get_mut(name)
     }
 
     /// Borrow a value
@@ -36,22 +31,28 @@ impl Table {
         step.get(&path.subject)
     }
 
-    /// Insert an entry into the Table.
-    pub fn insert(&mut self, name: Ident, value: Variant) -> Option<Variant> {
-        self.0.insert(name, value)
+    /// Join this table in place with a single entry. Return `true` iff it is updated.
+    /// If `name` is present its existing value is joined in place.
+    /// Otherwise `name` is inserted with the given `value`.
+    pub fn join_entry(&mut self, name: Ident, value: Variant) -> bool {
+        match self.0.entry(name) {
+            Entry::Vacant(slot) => {
+                slot.insert(value);
+                true
+            }
+            Entry::Occupied(slot) => {
+                let modified = slot.into_mut().join_update(value);
+                modified
+            }
+        }
     }
 }
 
 impl Lattice for Table {
     fn join_update(&mut self, other: Self) -> bool {
         let mut modified = false;
-        for (k, v) in other.0 {
-            if let Some(u) = self.0.get_mut(&k) {
-                modified |= u.join_update(v)
-            } else {
-                self.0.insert(k, v);
-                modified = true;
-            }
+        for (name, value) in other.0 {
+            modified |= self.join_entry(name, value);
         }
         modified
     }

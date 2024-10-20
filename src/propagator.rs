@@ -68,7 +68,7 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Propagators) -> usize {
     for rule in rules {
         if table.get(rule.target()).is_none() {
             if let Some(b) = rule.fire(&table) {
-                table.insert(rule.target().clone(), b);
+                table.join_entry(rule.target().clone(), b);
                 changes += 1;
             }
         }
@@ -97,13 +97,8 @@ pub fn evaluate_naive(
 
         for rule in rules {
             if let Some(value) = rule.fire(&table) {
-                if let Some(extant) = table.get_mut(rule.target()) {
-                    if extant.join_update(value) {
-                        changes = 1;
-                    }
-                } else {
-                    table.insert(rule.target().clone(), value);
-                    changes += 1;
+                if table.join_entry(rule.target().clone(), value) {
+                    changes += 1
                 }
             }
         }
