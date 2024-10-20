@@ -4,11 +4,10 @@ use crate::{
 };
 use std::{marker::PhantomData, ops::Div, rc::Rc};
 
-/// A property gives a name, `Ident`, and canonical type of a value.
-/// A property is also supposed to confer some meaning to a value,
-/// ie its interpretation or what it represents.
-/// If two properties have the same name they are equal.
-/// Equal properties should have the same type (but this is not enforced).
+/// A property confers a meaning to a value, its interpretation or what it represents.
+/// A property has a name or `Ident` that identifies it uniquely.
+/// Two properties that have the same name represent the same thing and are equal.
+/// They should have the same type (but this is not enforced).
 #[derive(Eq, Hash, Debug)]
 pub struct Property<A> {
     pub name: Ident,

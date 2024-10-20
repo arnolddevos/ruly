@@ -1,19 +1,26 @@
 use crate::{
     table::{Ident, IdentPath, Table},
-    variant::{Error, Lattice, Variant},
+    variant::{Error, Variant},
 };
 
-/// The monomorphic view of a rule used in the evaluators.
+/// A `Propagator` generates a new value from the existing values in a `Table`.  
+/// It declares which entries in the `Table` will influence its output via `dependencies`.  
+/// It designates the entry which should be updated with its output value via `target`.
+/// This trait is implemented by `PropagatorFunc` (monomorphic) and `Rule` (polymorphic).
 pub trait Propagator {
+    /// The `Ident` of table entry to update.
     fn target(&self) -> &Ident;
+    /// The `IdentPath`s of the table entries that influence this propagator.
     fn dependencies(&self) -> Vec<&IdentPath>;
+    /// Evaluate a new value based on the current values in the `Table`.
     fn fire(&self, state: &Table) -> Option<Variant>;
 }
 
-/// A corpus of rules
+/// A corpus of propagators
 pub type Propagators = Vec<Box<dyn Propagator>>;
 
-/// A general, untyped `Propagator` of any arity implemented by a function.
+/// A `Propagator` implemented by a function of a variable number of
+/// `Variant`s optionally producing a `Variant`.
 pub struct PropagatorFunc<F> {
     target: Ident,
     dependencies: Vec<IdentPath>,

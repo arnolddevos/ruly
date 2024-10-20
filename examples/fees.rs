@@ -17,22 +17,19 @@ static ITEM: Property<u32> = prop("item");
 static SURGEON_MBS_FEE: Property<Value<AUD>> = prop("surgeon_mbs_fee");
 static ASSIST_NOGAP_FEE: Property<Value<AUD>> = prop("assist_nogap_fee");
 
+#[rustfmt::skip]
 fn fees() -> Propagators {
-    Vec::from([
-        infer(&ASSIST_NOGAP_FEE)
-            .from(&ITEM)
-            .from(&ASSIST_51300)
+    [
+        infer(&ASSIST_NOGAP_FEE) .from(&ITEM) .from(&ASSIST_51300)
             .rule(|input| match input {
                 (51300, fee) => Some(fee),
                 _ => None,
             }),
-        infer(&ASSIST_NOGAP_FEE)
-            .from(&ITEM)
-            .from(&ASSIST_51303)
-            .from(&SURGEON_MBS_FEE)
+            
+        infer(&ASSIST_NOGAP_FEE) .from(&ITEM) .from(&ASSIST_51303) .from(&SURGEON_MBS_FEE)
             .rule(|input| match input {
                 (51303, r, s) => Some(s.scale(r * 0.2)),
                 _ => None,
             }),
-    ])
+    ].into()
 }
