@@ -5,6 +5,10 @@ use crate::{
     variant::{Error, Variant},
 };
 
+/// A polymophic function implementing `Propagator`.
+///
+/// A `Rule` consists of a dependent `Property`, a dependency `Path` or a
+/// tuple of dependency paths, and a function connecting these.
 #[derive(Debug)]
 pub struct Rule<H, T, F> {
     output: H,
@@ -18,6 +22,7 @@ struct FuncOptional<F>(F);
 #[derive(Debug)]
 struct FuncFallible<F>(F);
 
+/// The head of a `Rule` that produces values of type `A` for the given `Property``.
 pub fn infer<A>(prop: &Property<A>) -> Rule<Property<A>, (), ()> {
     Rule {
         output: prop.clone(),
@@ -27,6 +32,7 @@ pub fn infer<A>(prop: &Property<A>) -> Rule<Property<A>, (), ()> {
 }
 
 impl<A> Rule<Property<A>, (), ()> {
+    /// Add the 1st dependency to a rule.  The dependency is a path of type `B`.
     pub fn from<B>(self, path: impl Into<Path<B>>) -> Rule<Property<A>, Path<B>, ()> {
         Rule {
             output: self.output,
@@ -37,6 +43,7 @@ impl<A> Rule<Property<A>, (), ()> {
 }
 
 impl<A, B> Rule<Property<A>, Path<B>, ()> {
+    /// Add the 2nd dependency to a rule.  The dependency is a path of type `C`.
     pub fn from<C>(self, path: impl Into<Path<C>>) -> Rule<Property<A>, (Path<B>, Path<C>), ()> {
         Rule {
             output: self.output,
@@ -45,6 +52,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
         }
     }
 
+    /// Add an optional function to complete a rule of arity 1.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn(B) -> Option<A> + 'static,
@@ -58,6 +66,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
         })
     }
 
+    /// Add a fallible function to complete a rule of arity 1.  Return a `Propagator` object.
     pub fn rule_fallible<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn(B) -> Result<Option<A>, Error> + 'static,
@@ -73,6 +82,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
 }
 
 impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
+    /// Add the 3rd dependency to a rule.  The dependency is a path of type `D`.
     pub fn from<D>(
         self,
         path: impl Into<Path<D>>,
@@ -84,6 +94,7 @@ impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
         }
     }
 
+    /// Add an optional function to complete a rule of arity 2.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn((B, C)) -> Option<A> + 'static,
@@ -100,6 +111,7 @@ impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
 }
 
 impl<A, B, C, D> Rule<Property<A>, (Path<B>, Path<C>, Path<D>), ()> {
+    /// Add an optional function to complete a rule of arity 3.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn((B, C, D)) -> Option<A> + 'static,

@@ -4,7 +4,10 @@ use derive_more::derive::{Display, From, TryInto};
 use serde::{Deserialize, Serialize};
 use std::rc::Rc;
 
-/// A general value.  A monomorphic version of the types used in rules.
+/// A general value used in a `Propagator` and also
+/// monomorphic version of the types used in rules.
+/// `Variant` implements `Lattice` and values can be joined.
+///
 /// `Variant` implements `Lattice` such that
 /// - `Invalid` variants are inferior to all others.
 /// - `Set` variants are joined by union.
@@ -51,7 +54,7 @@ impl Variant {
 /// This means a.join(b).join(b) == a.join(b) which makes `join` useful in rule systems
 /// that iterate joins to reach a fixed point.
 ///   
-/// A lattice has a correspending partial ordering such that c == a.join(b) implies c >= a and c > b.  
+/// A lattice has a correspending partial ordering such that c == a.join(b) implies c >= a and c >= b.  
 /// When implementing `Lattice` it may make sense to also implement `PartialOrd`.  
 pub trait Lattice {
     /// Compute a join in place. Return `true` iff self is updated.

@@ -41,11 +41,16 @@ pub trait Quantity {
     fn format(value: &Self::Repr) -> String;
 }
 
-/// A wrapper for `Quantity` representations.  Essentially a _newtype_ for `Quantity::Repr`.
+/// A wrapper for `Quantity` representations.  
+///
+/// Essentially a _newtype_ for `Quantity::Repr`.
 /// Blanket implimentations are defined for `TryFrom<Variant>`, `Into<Variant>`, `FromStr` and `Display`.
 pub struct Value<Q: Quantity>(Q::Repr);
 
-/// Construct a Property in a const context e.g.
+/// Construct a Property in a const context.
+///
+/// e.g.
+///
 /// `pub static BALANCE: Property<Value<AUD>> = quant("balance");`
 pub const fn quant<Q: Quantity>(name: &'static str) -> Property<Value<Q>> {
     prop(name)

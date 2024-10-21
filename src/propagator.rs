@@ -6,7 +6,8 @@ use crate::{
 /// A `Propagator` generates a new value from the existing values in a `Table`.  
 /// It declares which entries in the `Table` will influence its output via `dependencies`.  
 /// It designates the entry which should be updated with its output value via `target`.
-/// This trait is implemented by `PropagatorFunc` (monomorphic) and `Rule` (polymorphic).
+///
+/// `Propagator` is implemented by `PropagatorFunc` (monomorphic) and `Rule` (polymorphic).
 pub trait Propagator {
     /// The `Ident` of table entry to update.
     fn target(&self) -> &Ident;
@@ -86,6 +87,7 @@ pub fn evaluate_priority_once(table: &mut Table, rules: &Propagators) -> usize {
 /// This recursively joins results until a fixed point is reached.  
 /// Rule order is unimportant.
 /// The strategy is called naive evaluation in the lit.  
+///
 /// Naive is the best we can do without using the rule dependency information.
 /// Rules or combinations of rules that diverge are caught by an iteration limit.
 pub fn evaluate_naive(
