@@ -9,6 +9,15 @@ use crate::{
 ///
 /// A `Rule` consists of a dependent `Property`, a dependency `Path` or a
 /// tuple of dependency paths, and a function connecting these.
+///
+/// A `Rule` is constructed by an expression e.g. `infer(prop).from(path).rule(func)`.
+/// The `infer` function constructs the head of the rule with a dependent `Property`.
+/// The `from` method adds a dependency `Path` and may be chained to add more paths.
+/// A function is passed to the `rule` method and a `Propagator` object is returned.
+///
+/// The rule function takes a single argument, either the dependency value or a
+/// tuple of two or three dependency values.  The function is not invoked unless all dependency
+/// values are available.  It returns an optional dependent value.   
 #[derive(Debug)]
 pub struct Rule<H, T, F> {
     output: H,

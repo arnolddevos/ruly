@@ -14,12 +14,13 @@ use std::{
     str::FromStr,
 };
 
-/// `Quantity` and `Value` help to define new types for `Property`s.
+/// `Quantity` helps to define new types for `Property`s.
 ///
 /// A quantity is a unit type that implements trait `Quantity`.  
-/// This defines a representation ,`Repr`, that should be convertable to and from `Variant`.
-/// And it defines `parse` and `format` functions that convert
-/// this representation to and from string.
+/// The implementation defines an associated type, `Repr`, the representation,
+/// which is convertable to and from `Variant`.
+/// It also defines `parse` and `format` functions that convert
+/// the representation to and from string.
 ///
 /// The type `Value<Q>`, where Q is a quantity, wraps the representation and provides  
 /// blanket implementations of `TryFrom<Variant>` and `Into<Variant>`, which are needed
@@ -28,7 +29,7 @@ use std::{
 /// In the rule system, a property for a quantity has type `Property<Value<Q>>` and
 /// can be conveniently defined by function `quant`.
 ///
-/// For example, a `Value<AUD>` is an amount in Australian dollars.
+/// For example, `AUD` is a quantity for Australian dollars.
 /// A property named `balance` is defined by `quant::<AUD>('balance')` and has type `Property<Value<AUD>>`.
 /// The `Quantity` implementation for `AUD` defines the representation as `i64`.   
 ///
