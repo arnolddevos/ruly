@@ -1,15 +1,13 @@
 use crate::{
-    propagator::Dependency,
-    variant::{Ident, Table, Variant},
+    table::{Ident, IdentPath, Table},
+    variant::Variant,
 };
-use derive_more::From;
 use std::{marker::PhantomData, ops::Div, rc::Rc};
 
-/// A property gives a name, `Ident`, and canonical type of a value.
-/// A property is also supposed to confer some meaning to a value,
-/// ie its interpretation or what it represents.
-/// If two properties have the same name they are equal.
-/// Equal properties should have the same type (but this is not enforced).
+/// A property confers a meaning to a value, its interpretation or what it represents.
+/// A property has a name or `Ident` that identifies it uniquely.
+/// Two properties that have the same name represent the same thing and are equal.
+/// They should have the same type (but this is not enforced).
 #[derive(Eq, Hash, Debug)]
 pub struct Property<A> {
     pub name: Ident,
@@ -55,8 +53,8 @@ pub const fn prop<A>(name: &'static str) -> Property<A> {
 /// Also, a single `Property` can be lifted into a `Path`.
 #[derive(Debug, Clone)]
 pub struct Path<A> {
-    prefix: Vec<Ident>,
-    subject: Property<A>,
+    inner: IdentPath,
+    marker: PhantomData<A>,
 }
 
 impl<A> Path<A>
@@ -64,18 +62,11 @@ where
     A: TryFrom<Variant>,
 {
     pub fn query(&self, table: &Table) -> Option<A> {
-        let mut step = table;
-        for next in self.prefix.iter() {
-            step = step.get(next)?.as_table()?;
-        }
-        step.get(&self.subject.name)?.clone().try_into().ok()
+        table.get_path(&self.inner)?.clone().try_into().ok()
     }
 
-    pub fn dependency(&self) -> Dependency {
-        Dependency {
-            prefix: &self.prefix,
-            subject: &self.subject.name,
-        }
+    pub fn ident_path(&self) -> &IdentPath {
+        &self.inner
     }
 }
 
@@ -84,8 +75,8 @@ impl<A> Div<&Property<A>> for &Property<Rc<Table>> {
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
         Path::<A> {
-            prefix: Vec::from([self.name.clone()]),
-            subject: rhs.clone(),
+            inner: IdentPath::new(self.name.clone()).append(rhs.name.clone()),
+            marker: PhantomData,
         }
     }
 }
@@ -94,11 +85,9 @@ impl<A> Div<&Property<A>> for Path<Rc<Table>> {
     type Output = Path<A>;
 
     fn div(self, rhs: &Property<A>) -> Self::Output {
-        let mut prefix = self.prefix;
-        prefix.push(self.subject.name);
         Path::<A> {
-            prefix,
-            subject: rhs.clone(),
+            inner: self.inner.append(rhs.name.clone()),
+            marker: PhantomData,
         }
     }
 }
@@ -106,8 +95,8 @@ impl<A> Div<&Property<A>> for Path<Rc<Table>> {
 impl<A> Into<Path<A>> for &Property<A> {
     fn into(self) -> Path<A> {
         Path::<A> {
-            prefix: Vec::new(),
-            subject: self.clone(),
+            inner: IdentPath::new(self.name.clone()),
+            marker: PhantomData,
         }
     }
 }

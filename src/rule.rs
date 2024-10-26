@@ -1,9 +1,23 @@
 use crate::{
-    propagator::{Dependency, Propagator},
+    propagator::Propagator,
     property::{Path, Property},
-    variant::{Error, Ident, Table, Variant},
+    table::{Ident, IdentPath, Table},
+    variant::{Error, Variant},
 };
 
+/// A polymophic function implementing `Propagator`.
+///
+/// A `Rule` consists of a dependent `Property`, a dependency `Path` or a
+/// tuple of dependency paths, and a function connecting these.
+///
+/// A `Rule` is constructed by an expression e.g. `infer(prop).from(path).rule(func)`.
+/// The `infer` function constructs the head of the rule with a dependent `Property`.
+/// The `from` method adds a dependency `Path` and may be chained to add more paths.
+/// A function is passed to the `rule` method and a `Propagator` object is returned.
+///
+/// The rule function takes a single argument, either the dependency value or a
+/// tuple of two or three dependency values.  The function is not invoked unless all dependency
+/// values are available.  It returns an optional dependent value.   
 #[derive(Debug)]
 pub struct Rule<H, T, F> {
     output: H,
@@ -17,6 +31,7 @@ struct FuncOptional<F>(F);
 #[derive(Debug)]
 struct FuncFallible<F>(F);
 
+/// The head of a `Rule` that produces values of type `A` for the given `Property``.
 pub fn infer<A>(prop: &Property<A>) -> Rule<Property<A>, (), ()> {
     Rule {
         output: prop.clone(),
@@ -26,6 +41,7 @@ pub fn infer<A>(prop: &Property<A>) -> Rule<Property<A>, (), ()> {
 }
 
 impl<A> Rule<Property<A>, (), ()> {
+    /// Add the 1st dependency to a rule.  The dependency is a path of type `B`.
     pub fn from<B>(self, path: impl Into<Path<B>>) -> Rule<Property<A>, Path<B>, ()> {
         Rule {
             output: self.output,
@@ -36,6 +52,7 @@ impl<A> Rule<Property<A>, (), ()> {
 }
 
 impl<A, B> Rule<Property<A>, Path<B>, ()> {
+    /// Add the 2nd dependency to a rule.  The dependency is a path of type `C`.
     pub fn from<C>(self, path: impl Into<Path<C>>) -> Rule<Property<A>, (Path<B>, Path<C>), ()> {
         Rule {
             output: self.output,
@@ -44,6 +61,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
         }
     }
 
+    /// Add an optional function to complete a rule of arity 1.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn(B) -> Option<A> + 'static,
@@ -57,6 +75,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
         })
     }
 
+    /// Add a fallible function to complete a rule of arity 1.  Return a `Propagator` object.
     pub fn rule_fallible<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn(B) -> Result<Option<A>, Error> + 'static,
@@ -72,6 +91,7 @@ impl<A, B> Rule<Property<A>, Path<B>, ()> {
 }
 
 impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
+    /// Add the 3rd dependency to a rule.  The dependency is a path of type `D`.
     pub fn from<D>(
         self,
         path: impl Into<Path<D>>,
@@ -83,6 +103,7 @@ impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
         }
     }
 
+    /// Add an optional function to complete a rule of arity 2.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn((B, C)) -> Option<A> + 'static,
@@ -99,6 +120,7 @@ impl<A, B, C> Rule<Property<A>, (Path<B>, Path<C>), ()> {
 }
 
 impl<A, B, C, D> Rule<Property<A>, (Path<B>, Path<C>, Path<D>), ()> {
+    /// Add an optional function to complete a rule of arity 3.  Return a `Propagator` object.
     pub fn rule<F>(self, func: F) -> Box<dyn Propagator>
     where
         F: Fn((B, C, D)) -> Option<A> + 'static,
@@ -125,7 +147,7 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<&IdentPath> {
         Vec::from([])
     }
 
@@ -144,8 +166,8 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
-        Vec::from([self.input.dependency()])
+    fn dependencies(&self) -> Vec<&IdentPath> {
+        Vec::from([self.input.ident_path()])
     }
 
     fn fire(&self, state: &Table) -> Option<Variant> {
@@ -168,8 +190,8 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
-        Vec::from([self.input.0.dependency(), self.input.1.dependency()])
+    fn dependencies(&self) -> Vec<&IdentPath> {
+        Vec::from([self.input.0.ident_path(), self.input.1.ident_path()])
     }
 
     fn fire(&self, state: &Table) -> Option<Variant> {
@@ -189,11 +211,11 @@ where
         &self.output.name
     }
 
-    fn dependencies(&self) -> Vec<Dependency> {
+    fn dependencies(&self) -> Vec<&IdentPath> {
         Vec::from([
-            self.input.0.dependency(),
-            self.input.1.dependency(),
-            self.input.2.dependency(),
+            self.input.0.ident_path(),
+            self.input.1.ident_path(),
+            self.input.2.ident_path(),
         ])
     }
 
